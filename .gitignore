@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# IDE settings
+.vscode/
+.idea/
+.trae/
+
+# Project specific
+sync_config.json
+*.bak.*
+*.log
+
+# System
+.DS_Store
+Thumbs.db
