@@ -36,7 +36,22 @@ A bidirectional synchronization tool between Obsidian (Markdown) and Feishu/Lark
     Edit `.env` and fill in your `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_USER_ACCESS_TOKEN`.
 
 ## Usage
-### 1. Single File Sync (Command Line)
+
+### Important: Folder Visibility
+By default, the App (Bot) syncs files to its own private cloud space ("My Space" of the bot). To view and manage these files:
+1.  Create a **Folder** in your own Feishu Drive.
+2.  Share this folder with your **App/Bot** (Search for the App Name in the Share/Collaborate menu) and grant **"Can Edit"** permission.
+3.  Copy the folder token from the URL (e.g., `folder/fldcn...` -> `fldcn...`).
+4.  Use this token in your configuration.
+
+### 1. Folder Sync
+Sync an entire local folder to a cloud folder.
+```bash
+python3 main.py /path/to/local/folder <cloud_folder_token>
+```
+*   `cloud_folder_token`: The token of the target Feishu folder. If you use `root`, it will sync to the Bot's root folder (not recommended for visibility).
+
+### 2. Single File Sync (Command Line)
 ```bash
 python3 main.py <path_to_markdown_file> <doc_token> [--force]
 ```
@@ -45,22 +60,22 @@ python3 main.py <path_to_markdown_file> <doc_token> [--force]
 *   `doc_token`: The token of the Feishu document (found in the URL: `https://.../docx/YOUR_TOKEN_HERE`).
 *   `--force`: Optional. Forces upload from Local to Cloud, ignoring timestamps and cloud changes.
 
-### 2. Batch Sync (Config File)
-You can configure multiple file pairs in `sync_config.json`.
+### 3. Batch Sync (Config File)
+You can configure multiple sync tasks (both files and folders) in `sync_config.json`.
 
 1. Create or edit `sync_config.json` in the project root:
 ```json
 [
   {
-    "note": "Project Plan",
-    "local": "/Users/username/obsidian/Plan.md",
-    "cloud": "QhdpdzmwWoccPQxu1yAcvuuAn7b",
+    "note": "My Obsidian Vault",
+    "local": "/Users/username/obsidian/Vault",
+    "cloud": "fldcnYourSharedFolderToken",
     "enabled": true
   },
   {
-    "note": "Meeting Notes",
-    "local": "/Users/username/obsidian/Meeting.md",
-    "cloud": "AnotherTokenHere",
+    "note": "Project Plan (Single File)",
+    "local": "/Users/username/obsidian/Plan.md",
+    "cloud": "docxYourDocToken",
     "enabled": true
   }
 ]
