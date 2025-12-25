@@ -3,6 +3,10 @@ import json
 import os
 import traceback
 from src.sync import SyncManager, FolderSyncManager
+from src.converter import MarkdownToFeishu
+from src.feishu_client import FeishuClient
+from config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
+import sys
 
 def load_config(config_path):
     if not os.path.exists(config_path):
@@ -39,6 +43,10 @@ def main():
     parser.add_argument("--config", default="sync_config.json", help="Path to sync config file (default: sync_config.json)")
     
     args = parser.parse_args()
+    
+    # Init Client
+    # Pass USER_ACCESS_TOKEN if available, otherwise it defaults to Tenant Token
+    client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=FEISHU_USER_ACCESS_TOKEN)
     
     # Mode 1: Single task via CLI args
     if args.md_path and args.doc_token:

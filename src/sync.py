@@ -100,8 +100,20 @@ class SyncManager:
             if not blocks:
                 print("⚠️ 警告: 云端文档为空，无需下载。")
                 return SyncResult.EMPTY_CLOUD
+            
+            # Define image downloader callback
+            def image_downloader(token: str) -> Optional[str]:
+                # Assets folder: ./assets
+                assets_dir = os.path.join(os.path.dirname(self.md_path), "assets")
+                filename = f"{token}.png" # Default to png
+                save_path = os.path.join(assets_dir, filename)
                 
-            converter = FeishuToMarkdown()
+                if self.client.download_image(token, save_path):
+                    # Return relative path for markdown
+                    return os.path.join("assets", filename)
+                return None
+
+            converter = FeishuToMarkdown(image_downloader=image_downloader)
             md_content = converter.convert(blocks)
             
             # Backup
@@ -117,6 +129,8 @@ class SyncManager:
             
         except Exception as e:
             print(f"❌ 反向同步过程中发生错误: {e}")
+            import traceback
+            traceback.print_exc()
             return SyncResult.ERROR
 
     def _sync_local_to_cloud(self):
@@ -127,7 +141,22 @@ class SyncManager:
         with open(self.md_path, "r", encoding="utf-8") as f:
             md_text = f.read()
             
-        converter = MarkdownToFeishu()
+        # Define image uploader callback
+        def image_uploader(src: str) -> Optional[str]:
+            # Resolve path
+            # If src is absolute, use it. If relative, join with md_path dir.
+            if os.path.isabs(src):
+                abs_path = src
+            else:
+                abs_path = os.path.join(os.path.dirname(self.md_path), src)
+            
+            if os.path.exists(abs_path):
+                return abs_path
+            
+            print(f"❌ 图片未找到: {abs_path}")
+            return None
+
+        converter = MarkdownToFeishu(image_uploader=image_uploader)
         blocks = converter.parse(md_text)
         print(f"✨ 已生成 {len(blocks)} 个文档块。")
         
@@ -137,7 +166,8 @@ class SyncManager:
         print("📤 正在上传新内容...")
         self.client.add_blocks(self.doc_token, blocks)
         
-        print("✅ 同步完成！")
+        doc_url = f"https://feishu.cn/docx/{self.doc_token}"
+        print(f"✅ 同步完成！文档链接: {doc_url}")
 
 
 class FolderSyncManager:

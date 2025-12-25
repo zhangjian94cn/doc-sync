@@ -3,8 +3,9 @@ import re
 from markdown_it import MarkdownIt
 
 class MarkdownToFeishu:
-    def __init__(self):
+    def __init__(self, image_uploader=None):
         self.md = MarkdownIt()
+        self.image_uploader = image_uploader
         
     def _preprocess_markdown(self, text: str) -> str:
         """
@@ -129,11 +130,9 @@ class MarkdownToFeishu:
                         field_name: self._create_text_elements_from_token(inline_token)
                     })
                 else:
-                    # Regular paragraph
-                    blocks.append({
-                        "block_type": 2, # Text
-                        "text": self._create_text_elements_from_token(inline_token)
-                    })
+                    # Regular paragraph - handle mixed text and images
+                    generated_blocks = self._process_inline_content(inline_token)
+                    blocks.extend(generated_blocks)
                     
             elif token.type == 'fence':
                 # Code block
@@ -143,12 +142,12 @@ class MarkdownToFeishu:
                 if content.endswith('\n'):
                     content = content[:-1]
                     
+                # SDK defines code block as Text object, implying flat structure?
+                # Trying to fit SDK model: code -> elements
                 blocks.append({
                     "block_type": 14, # Code
                     "code": {
-                        "language": 1, # Default Plain Text. Mapping is complex.
-                        "wrap": True,
-                        "body": {"elements": [{"text_run": {"content": content}}]}
+                        "elements": [{"text_run": {"content": content}}]
                     }
                 })
                 
@@ -157,6 +156,138 @@ class MarkdownToFeishu:
             i += 1
             
         return blocks
+
+    def _process_inline_content(self, inline_token) -> List[Dict[str, Any]]:
+        """
+        Process an inline token that might contain text and images.
+        Returns a list of blocks (Text blocks and Image blocks).
+        """
+        if not inline_token or not inline_token.children:
+            return [{
+                "block_type": 2, 
+                "text": {"elements": [{"text_run": {"content": ""}}]}
+            }]
+
+        blocks = []
+        current_elements = []
+        
+        # Style state
+        is_bold = False
+        is_italic = False
+        is_strikethrough = False
+        is_code = False
+        
+        # Helper to flush current text elements to a block
+        def flush_text():
+            if current_elements:
+                blocks.append({
+                    "block_type": 2,
+                    "text": {"elements": list(current_elements)}
+                })
+                current_elements.clear()
+
+        i = 0
+        children = inline_token.children
+        while i < len(children):
+            child = children[i]
+            
+            if child.type == 'image':
+                flush_text()
+                
+                # Handle Image
+                src = child.attrs.get('src', '')
+                alt = child.content or "" # Capture Alt Text
+                
+                if src and self.image_uploader:
+                    print(f"🖼️ 发现图片，准备处理: {src}")
+                    image_path_or_token = self.image_uploader(src)
+                    if image_path_or_token:
+                        blocks.append({
+                            "block_type": 27, # Image
+                            "image": {
+                                "token": image_path_or_token
+                            },
+                            "alt": alt # Store Alt Text for fallback
+                        })
+                        print(f"✅ 图片路径已解析: {image_path_or_token}")
+                    else:
+                        print(f"❌ 图片解析失败: {src}")
+                        current_elements.append({
+                            "text_run": {
+                                "content": f"![{alt}]({src})"
+                            }
+                        })
+                else:
+                    current_elements.append({
+                        "text_run": {
+                            "content": f"![{alt}]({src})"
+                        }
+                    })
+            
+            elif child.type == 'text':
+                text_content = child.content
+                if text_content:
+                    style = {}
+                    if is_bold: style["bold"] = True
+                    if is_italic: style["italic"] = True
+                    if is_strikethrough: style["strikethrough"] = True
+                    if is_code: style["inline_code"] = True
+                    
+                    element = {
+                        "text_run": {
+                            "content": text_content,
+                        }
+                    }
+                    if style:
+                        element["text_run"]["text_element_style"] = style
+                    current_elements.append(element)
+                    
+            elif child.type == 'strong_open':
+                is_bold = True
+            elif child.type == 'strong_close':
+                is_bold = False
+            elif child.type == 'em_open':
+                is_italic = True
+            elif child.type == 'em_close':
+                is_italic = False
+            elif child.type == 's_open':
+                is_strikethrough = True
+            elif child.type == 's_close':
+                is_strikethrough = False
+            elif child.type == 'code_inline':
+                style = {"inline_code": True}
+                element = {
+                    "text_run": {
+                        "content": child.content,
+                        "text_element_style": style
+                    }
+                }
+                current_elements.append(element)
+            elif child.type == 'softbreak':
+                current_elements.append({"text_run": {"content": "\n"}})
+            elif child.type == 'hardbreak':
+                current_elements.append({"text_run": {"content": "\n"}})
+            
+            i += 1
+            
+        flush_text()
+        
+        if not blocks:
+             return [{
+                "block_type": 2, 
+                "text": {"elements": [{"text_run": {"content": ""}}]}
+            }]
+            
+        return blocks
+
+    def _create_element_from_child(self, child) -> Optional[Dict[str, Any]]:
+        # Deprecated / Not used in this implementation
+        return None 
+
+    # Re-implementing _create_text_elements_from_token to use a generator or shared logic would be better.
+    # Let's stick to the previous monolithic loop but break on image.
+    
+    # ... Wait, I need to fix _process_inline_content to handle styles correctly ...
 
     def _create_text_elements_from_token(self, inline_token) -> Dict[str, Any]:
         """
@@ -237,8 +368,8 @@ class MarkdownToFeishu:
 
 
 class FeishuToMarkdown:
-    def __init__(self):
-        pass
+    def __init__(self, image_downloader=None):
+        self.image_downloader = image_downloader
 
     def convert(self, blocks: List[Any]) -> str:
         md_lines = []
@@ -259,6 +390,7 @@ class FeishuToMarkdown:
         # 13: Ordered
         # 14: Code
         # 22: Todo
+        # 27: Image
         
         text_obj = None
         prefix = ""
@@ -297,6 +429,18 @@ class FeishuToMarkdown:
             if hasattr(block.todo, 'style') and block.todo.style and block.todo.style.done:
                  checked = True
             prefix = "- [x] " if checked else "- [ ] "
+        elif b_type == 27: # Image
+            image_obj = block.image
+            token = image_obj.token
+            if self.image_downloader:
+                print(f"📥 发现云端图片，准备下载: {token}")
+                local_path = self.image_downloader(token)
+                if local_path:
+                    return f"![Image]({local_path})"
+                else:
+                    return f"![下载失败]({token})"
+            else:
+                return f"![Image]({token})"
         else:
             return None
 
