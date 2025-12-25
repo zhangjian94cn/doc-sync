@@ -197,7 +197,7 @@ class SyncManager:
                     2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
                     6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
                     10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
-                    14: "code", 22: "todo", 27: "image"
+                    14: "code", 22: "todo", 23: "file", 27: "image"
                 }
                 
                 attr_name = attr_map.get(b_type)
@@ -313,8 +313,8 @@ class SyncManager:
 
             # Pre-process content to handle Code Block merging and Image emptying
             def preprocess_content(block_type, content_dict):
-                # 1. Image: Empty it
-                if block_type == 27:
+                # 1. Image / File: Empty it
+                if block_type == 27 or block_type == 23:
                     return {}
                 
                 # 2. Code: Merge elements text

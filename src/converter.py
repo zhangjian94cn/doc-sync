@@ -194,24 +194,49 @@ class MarkdownToFeishu:
             if child.type == 'image':
                 flush_text()
                 
-                # Handle Image
+                # Handle Image / File / Video
                 src = child.attrs.get('src', '')
                 alt = child.content or "" # Capture Alt Text
                 
+                # Check extension to determine block type
+                ext = src.lower().split('.')[-1] if '.' in src else ''
+                
+                # Video Extensions
+                video_exts = {'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv'}
+                # File Extensions (that usually imply an attachment)
+                file_exts = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'tar', 'txt', 'md'}
+                
+                is_media_file = ext in video_exts or ext in file_exts
+                
                 if src and self.image_uploader:
-                    print(f"🖼️ 发现图片，准备处理: {src}")
-                    image_path_or_token = self.image_uploader(src)
-                    if image_path_or_token:
-                        blocks.append({
-                            "block_type": 27, # Image
-                            "image": {
-                                "token": image_path_or_token
-                            },
-                            "alt": alt # Store Alt Text for fallback
-                        })
-                        print(f"✅ 图片路径已解析: {image_path_or_token}")
+                    # Reuse image_uploader callback for generic file resolving
+                    print(f"� 发现资源引用 ({ext}), 准备处理: {src}")
+                    file_path = self.image_uploader(src)
+                    
+                    if file_path:
+                        if is_media_file:
+                            # File Block (Type 23)
+                            # Note: Feishu Doc uses File Block for videos/files uploaded locally
+                            blocks.append({
+                                "block_type": 23, # File
+                                "file": {
+                                    "token": file_path, # Temporary path, will be replaced by upload logic
+                                    "name": alt or os.path.basename(file_path)
+                                }
+                            })
+                            print(f"✅ 文件路径已解析: {file_path}")
+                        else:
+                            # Default to Image Block (Type 27)
+                            blocks.append({
+                                "block_type": 27, # Image
+                                "image": {
+                                    "token": file_path
+                                },
+                                "alt": alt
+                            })
+                            print(f"✅ 图片路径已解析: {file_path}")
                     else:
-                        print(f"❌ 图片解析失败: {src}")
+                        print(f"❌ 资源解析失败: {src}")
                         current_elements.append({
                             "text_run": {
                                 "content": f"![{alt}]({src})"

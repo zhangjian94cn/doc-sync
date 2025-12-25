@@ -23,7 +23,17 @@ def hello():
     print("Hello, Feishu!")
 ```
 
-## 4. Lists
+## 4. Attachments & Media
+
+![Video Demo](assets/demo_video.mp4)
+
+![PDF Document](assets/demo_doc.pdf)
+
+![Archive](assets/demo_archive.zip)
+
+![Text File](assets/demo.txt)
+
+## 5. Lists
 
 1. First Item
 2. Second Item
