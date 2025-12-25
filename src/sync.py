@@ -400,9 +400,13 @@ class SyncManager:
             w_cloud = 12
             w_local = 12
             
+            # 1. Print Diff Table (Plan)
             print(f"  ┌{'─'*w_type}┬{'─'*w_cloud}┬{'─'*w_local}┐")
             print(f"  │{pad_center('类型', w_type)}│{pad_center('云端块索引', w_cloud)}│{pad_center('本地块索引', w_local)}│")
             print(f"  ├{'─'*w_type}┼{'─'*w_cloud}┼{'─'*w_local}┤")
+            
+            # Collect operations to execute
+            ops_to_exec = []
             
             for tag, i1, i2, j1, j2 in reversed(opcodes):
                 if tag == 'equal':
@@ -419,6 +423,14 @@ class SyncManager:
                 # Print row
                 print(f"  │{pad_center(icon, w_type)}│{pad_center(c_range, w_cloud)}│{pad_center(l_range, w_local)}│")
                 
+                ops_to_exec.append((tag, i1, i2, j1, j2))
+            
+            # Table Footer
+            print(f"  └{'─'*w_type}┴{'─'*w_cloud}┴{'─'*w_local}┘")
+            
+            # 2. Execute Operations
+            print("🚀 开始执行同步操作...")
+            for tag, i1, i2, j1, j2 in ops_to_exec: # Order is already reversed
                 if tag == 'delete':
                     # Cloud blocks [i1:i2] need to be deleted.
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
@@ -435,9 +447,6 @@ class SyncManager:
                     # 2. Insert new at i1
                     blocks_to_insert = local_blocks[j1:j2]
                     self.client.add_blocks(self.doc_token, blocks_to_insert, index=i1)
-            
-            # Table Footer
-            print(f"  └{'─'*w_type}┴{'─'*w_cloud}┴{'─'*w_local}┘")
 
         doc_url = f"https://feishu.cn/docx/{self.doc_token}"
         print(f"✅ 同步完成！文档链接: {doc_url}")
