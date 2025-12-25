@@ -1,83 +1,118 @@
-# Obsidian Feishu Sync
+# FeishuSync
 
-A powerful bidirectional synchronization tool between **Obsidian (Markdown)** and **Feishu/Lark Docs**. Keep your local knowledge base and cloud docs in perfect sync.
+一款简洁美观的桌面客户端，帮助你在 **Obsidian** 与 **飞书/ Lark** 之间实现双向同步。
 
-[中文文档](README_CN.md)
+![FeishuSync](./docs/preview.png)
 
-## ✨ Features
+---
 
-- **🔄 Bidirectional Sync**: Automatically detects changes and syncs the newer version (Local ↔ Cloud).
-- **🖼️ Image Support**: Automatically uploads local images to Feishu Drive and embeds them in the document.
-- **📂 Folder Sync**: Recursively syncs entire folder structures, maintaining hierarchy.
-- **🛡️ Safety First**:
-    - Automatic `.bak` backups before overwriting local files.
-    - Timestamp-based conflict detection.
-- **📝 Rich Text Support**:
-    - Headings (H1-H9)
-    - Lists (Bullet, Ordered, Todo)
-    - Code Blocks & Inline Code
-    - Bold, Italic, Strikethrough, Links
+## ✨ 主要功能
 
-## 🚀 Quick Start
+- **双向同步**：本地 Markdown ⇄ 飞书云文档
+- **任务管理**：可视化添加、编辑、删除同步规则
+- **多主题**：深色 / 浅色 / 跟随系统，6 种强调色随心换
+- **中英双语**：界面一键切换中文/English
+- **安全本地存储**：API 密钥与任务配置全部保存在本地
 
-Try it out immediately with our built-in example!
+---
 
-1.  **Clone & Install**:
-    ```bash
-    git clone https://github.com/your-repo/doc-sync.git
-    cd doc-sync
-    pip install -r requirements.txt
-    ```
+## 🚀 快速开始
 
-2.  **Configure**:
-    ```bash
-    cp .env.example .env
-    # Edit .env and fill in your FEISHU_APP_ID and FEISHU_APP_SECRET
-    ```
-
-3.  **Run Example**:
-    ```bash
-    python3 run_example.py
-    ```
-    Follow the prompts to sync a sample vault to your Feishu Drive.
-
-## 📖 Usage Guide
-
-### 1. Folder Sync (Recommended)
-Sync an entire local folder to a cloud folder.
+### 1. 克隆与安装
 
 ```bash
-python3 main.py /path/to/local/folder <cloud_folder_token>
-```
-*   `cloud_folder_token`: The token of the target Feishu folder. Use `root` to sync to the App's root directory.
+git clone https://github.com/yourname/feishu-sync.git
+cd feishu-sync
 
-### 2. Single File Sync
-Sync a single Markdown file.
+# Python 依赖
+pip install -r requirements.txt
+
+# 前端依赖
+cd electron-app
+npm install
+```
+
+### 2. 运行开发环境
 
 ```bash
-python3 main.py /path/to/file.md <doc_token> [--force]
+# 先启动 Electron 界面
+npm start
+
+# 如需手动同步，在项目根目录执行
+python main.py
 ```
 
-### 3. Configuration File (Batch Sync)
-Manage multiple sync tasks using `sync_config.json`.
+### 3. 打包发布
 
-```json
-[
-  {
-    "note": "My Knowledge Base",
-    "local": "/Users/me/obsidian/Vault",
-    "cloud": "fldcnYourFolderToken",
-    "enabled": true
-  }
-]
+```bash
+npm run dist   # 一键构建 Python 核心 + Electron 外壳
 ```
-Run with `python3 main.py`.
 
-## 🛠️ Requirements
+构建完成后，可在 `electron-app/dist/` 找到系统安装包：
+- macOS: `FeishuSync-*.dmg`
+- Windows: `FeishuSync Setup *.exe`
+- Linux: `FeishuSync-*.AppImage`
 
-- Python 3.8+
-- Feishu/Lark Open Platform App (Enable **Docs** and **Drive** permissions)
+---
 
-## 📄 License
+## 🔧 飞书 API 配置
 
-MIT
+1. 登录[飞书开放平台](https://open.feishu.cn/) → 创建企业自建应用
+2. 在「凭证与基础信息」中获取：
+   - `App ID`（以 `cli_` 开头）
+   - `App Secret`
+3. 在「权限管理」中开通：
+   - `drive:file:read`
+   - `drive:file:write`
+   - `docx:document:read`
+   - `docx:document:write`
+4. 回到 FeishuSync → Settings → 填入凭据 → Save
+
+---
+
+## 📖 使用说明
+
+### 添加同步任务
+
+1. 切换到「Tasks」页
+2. 点击「Add Task」→ 填写：
+   - 任务名称（任意）
+   - Local：选择本地 Obsidian 库文件夹
+   - Cloud：飞书云文档文件夹 token（在飞书网页端地址栏获取）
+3. 保存后点击「Sync Now」即可开始双向同步
+
+### 外观设置
+
+- **主题**：System / Dark / Light
+- **强调色**：6 种配色，含飞书绿、GitHub 蓝等
+- **语言**：中文 / English 实时切换
+
+---
+
+## 🛠️ 技术栈
+
+| 模块        | 技术                     |
+|-------------|--------------------------|
+| 同步核心    | Python 3.10 + Lark SDK   |
+| 桌面客户端  | Electron 28 + Vanilla JS |
+| 打包        | electron-builder + PyInstaller |
+
+---
+
+## 📄 许可证
+
+MIT © 2024 FeishuSync Team
+
+---
+
+## 🤝 贡献
+
+欢迎提 Issue 与 PR！
+
+---
+
+## ⚠️ 注意
+
+- 首次同步前请**备份**重要笔记，避免冲突覆盖
+- 飞书 API 有调用频率限制，大量文件请分批同步
+- 本工具为开源个人作品，与飞书官方无关

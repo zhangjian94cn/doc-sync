@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeishuSync</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 10v6M2 10v6" />
+                        <path d="M2 10l10-5 10 5-10 5z" />
+                        <path d="M12 12v9" />
+                    </svg>
+                </div>
+                <span data-i18n="brand">FeishuSync</span>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard" data-i18n="dashboard">Dashboard</button>
+                <button class="nav-item" data-tab="tasks" data-i18n="tasks">Tasks</button>
+                <button class="nav-item" data-tab="settings" data-i18n="settings">Settings</button>
+                <button class="nav-item" data-tab="appearance" data-i18n="appearance">Appearance</button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <div class="dot"></div>
+                    <span id="app-status" data-i18n="ready">Ready</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Header -->
+            <header class="top-bar">
+                <h2 id="page-title" data-key="dashboard" data-i18n="dashboard">Dashboard</h2>
+                <div style="flex: 1; -webkit-app-region: drag;"></div> <!-- Spacer -->
+                <div class="theme-toggle-container" style="position: relative; z-index: 20000;">
+                    <button id="theme-toggle-btn" class="icon-btn" title="Toggle Theme">
+                        <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                        <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                    </button>
+                </div>
+                <div class="window-drag-area"></div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div id="dashboard" class="view active">
+                <div class="hero-section">
+                    <div class="sync-circle-container">
+                        <button id="start-sync-btn" class="sync-button">
+                            <div class="icon-box">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                            </div>
+                            <span data-i18n="syncNow">Sync Now</span>
+                        </button>
+                    </div>
+                    <p class="last-sync-text"><span data-i18n="lastSynced">Last synced</span>: <span id="last-sync-time" data-i18n="never">Never</span></p>
+                </div>
+
+                <div class="log-panel">
+                    <div class="panel-header">
+                        <h3 data-i18n="activityLog">Activity Log</h3>
+                        <button id="clear-log-btn" class="icon-btn" title="Clear Logs" data-i18n="clearLogs">Clear Logs</button>
+                    </div>
+                    <div class="log-console" id="log-output">
+                        <div class="log-placeholder" data-i18n="ready">Ready to sync...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks View -->
+            <div id="tasks" class="view">
+                <div class="view-header">
+                    <p data-i18n="manageSyncPaths">Manage your synchronization paths</p>
+                    <button id="add-task-btn" class="primary-btn small">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span data-i18n="addTask">Add Task</span>
+                    </button>
+                </div>
+                <div id="tasks-list" class="tasks-grid">
+                    <!-- Task Cards injected here -->
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settings" class="view">
+                <div class="settings-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="feishuCredentials">Feishu / Lark Credentials</h3>
+                            <p data-i18n="credentialsDesc">Required for API access</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <label data-i18n="appId">App ID</label>
+                                <input type="text" id="app-id" placeholder="cli_...">
+                            </div>
+                            <div class="input-group">
+                                <label data-i18n="appSecret">App Secret</label>
+                                <input type="password" id="app-secret" placeholder="••••••••••••••••">
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button id="save-env-btn" class="primary-btn" data-i18n="saveCredentials">Save Credentials</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="about">About</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">FeishuSync v1.0.0</p>
+                            <p class="text-muted" data-i18n="appDesc">A modern bidirectional synchronization tool for Obsidian and Feishu.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Appearance View -->
+            <div id="appearance" class="view">
+                <div class="settings-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="general">General</h3>
+                            <p data-i18n="appWidePrefs">Application-wide preferences</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <label for="language-select" data-i18n="language">Language / 语言</label>
+                                <select id="language-select" class="select-input">
+                                    <option value="en">English</option>
+                                    <option value="zh">简体中文</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="theme-select" data-i18n="theme">Theme</label>
+                                <select id="theme-select" class="select-input">
+                                    <option value="system" data-i18n="system">System</option>
+                                    <option value="dark" data-i18n="dark">Dark</option>
+                                    <option value="light" data-i18n="light">Light</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label data-i18n="accentColor">Accent Color</label>
+                                <div class="color-palette">
+                                    <button class="color-btn" data-color="#00D6B9" style="background:#00D6B9" title="Feishu Green"></button>
+                                    <button class="color-btn" data-color="#0969da" style="background:#0969da" title="GitHub Blue"></button>
+                                    <button class="color-btn" data-color="#e91e63" style="background:#e91e63" title="Pink"></button>
+                                    <button class="color-btn" data-color="#ff9800" style="background:#ff9800" title="Orange"></button>
+                                    <button class="color-btn" data-color="#9c27b0" style="background:#9c27b0" title="Purple"></button>
+                                    <button class="color-btn" data-color="#4caf50" style="background:#4caf50" title="Green"></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button id="save-appearance-btn" class="primary-btn" data-i18n="savePreferences">Save Preferences</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="window">Window</h3>
+                            <p data-i18n="titleBarOpts">Title bar and layout options</p>
+                        </div>
+                        <div class="card-body">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="cb-compact-title">
+                                <span data-i18n="compactTitleBar">Compact title bar (smaller top margin)</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="cb-hide-traffic-lights">
+                                <span data-i18n="hideTrafficLights">Hide window controls (macOS only)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Task Card Template -->
+    <template id="task-template">
+        <div class="task-card">
+            <div class="task-card-header">
+                <div class="task-icon">📄</div>
+                <input type="text" class="task-note-input" placeholder="Task Name" data-i18n-placeholder="taskNamePlaceholder">
+                <div class="task-actions">
+                    <label class="switch" title="Enable/Disable">
+                        <input type="checkbox" class="task-enabled">
+                        <span class="slider round"></span>
+                    </label>
+                    <button class="icon-btn delete-task-btn" title="Remove" data-i18n="removeTask">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="task-card-body">
+                <div class="field-row">
+                    <span class="field-label" data-i18n="localPath">Local</span>
+                    <div class="input-with-btn">
+                        <input type="text" class="task-local" placeholder="Path..." readonly data-i18n-placeholder="pathPlaceholder">
+                        <button class="browse-btn" data-i18n="browse">📂</button>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <span class="field-label" data-i18n="cloudFolder">Cloud</span>
+                    <input type="text" class="task-cloud" placeholder="Folder Token" data-i18n-placeholder="folderTokenPlaceholder">
+                </div>
+                <div class="options-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" class="task-force">
+                        <span data-i18n="forceUpload">Force Upload</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

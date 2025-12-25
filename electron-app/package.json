@@ -1,0 +1,49 @@
+{
+  "name": "feishu-sync",
+  "version": "1.0.0",
+  "description": "A modern bidirectional synchronization tool for Obsidian and Feishu/Lark with a beautiful desktop GUI.",
+  "main": "electron_main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-python": "cd .. && pyinstaller --onefile --name feishu-sync-core --distpath electron-app/resources/python --workpath electron-app/build/python --specpath electron-app/build/python main.py",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build-python && electron-builder"
+  },
+  "author": "FeishuSync Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.feishusync.app",
+    "productName": "FeishuSync",
+    "directories": {
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "electron_main.js",
+      "gui/**/*",
+      "resources/python/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/python",
+        "to": "python",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build-assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build-assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build-assets/icon.png"
+    }
+  }
+}

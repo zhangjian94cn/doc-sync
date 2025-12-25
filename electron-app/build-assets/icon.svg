@@ -1,0 +1,9 @@
+<!-- 生成 512x512 的 PNG，再转 icns/ico -->
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="96" fill="#00D6B9"/>
+  <g stroke="#fff" stroke-width="24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M128 176h256M128 336h256"/>
+    <path d="M128 176 256 96 384 176 256 256z"/>
+    <path d="M256 256v160"/>
+  </g>
+</svg>

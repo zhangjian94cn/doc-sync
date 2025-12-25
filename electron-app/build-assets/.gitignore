@@ -1,0 +1,6 @@
+# 忽略打包生成的真实图标，只保留 svg 源文件
+*.icns
+*.ico
+*.png
+# 保留 svg
+!icon.svg
