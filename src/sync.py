@@ -19,10 +19,11 @@ class SyncManager:
     """
     Handles synchronization of a single Markdown file with a Feishu Document.
     """
-    def __init__(self, md_path: str, doc_token: str, force: bool = False):
+    def __init__(self, md_path: str, doc_token: str, force: bool = False, target_folder: str = None):
         self.md_path = md_path
         self.doc_token = doc_token
         self.force = force
+        self.target_folder = target_folder
         self.client = FeishuClient(
             config.FEISHU_APP_ID, 
             config.FEISHU_APP_SECRET
@@ -35,6 +36,12 @@ class SyncManager:
         print(f"\n{'-'*30}")
         print(f"📄 任务: {os.path.basename(self.md_path)}")
         print(f"{'-'*30}")
+
+        if self.target_folder:
+            # Ensure doc is in the target folder
+            # print(f"🚚 确保文档在目标文件夹: {self.target_folder}...")
+            # self.client.move_file(self.doc_token, self.target_folder)
+            pass
 
         if not os.path.exists(self.md_path):
             print(f"❌ 错误: 未找到文件: {self.md_path}")
@@ -552,7 +559,7 @@ class FolderSyncManager:
                     # Sync
                     c_file = cloud_map[doc_name]
                     if c_file.type == "docx":
-                        sync = SyncManager(item_path, c_file.token, self.force)
+                        sync = SyncManager(item_path, c_file.token, self.force, target_folder=cloud_token)
                         sync.run()
                     else:
                         print(f"⚠️ 警告: 名称冲突。本地是 .md 文件，但云端是 {c_file.type}。跳过。")
@@ -562,6 +569,7 @@ class FolderSyncManager:
                     new_token = self.client.create_docx(cloud_token, doc_name)
                     if new_token:
                         print(f"✨ 已创建文档 {doc_name} ({new_token}), 开始同步内容...")
+                        
                         # Newly created doc needs force upload to bypass timestamp check
-                        sync = SyncManager(item_path, new_token, force=True)
+                        sync = SyncManager(item_path, new_token, force=True, target_folder=cloud_token)
                         sync.run()

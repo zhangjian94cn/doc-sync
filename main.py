@@ -20,7 +20,7 @@ def load_config(config_path):
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def run_single_task(local_path, cloud_token, force, note=""):
+def run_single_task(local_path, cloud_token, force, note="", target_folder=None):
     """
     Determines whether the task is a folder or file sync and runs the appropriate manager.
     """
@@ -38,7 +38,9 @@ def run_single_task(local_path, cloud_token, force, note=""):
         manager.run()
     else:
         print(f"📄 任务类型: 单文件同步")
-        manager = SyncManager(local_path, cloud_token, force)
+        if target_folder:
+            print(f"📂 目标文件夹: {target_folder}")
+        manager = SyncManager(local_path, cloud_token, force, target_folder=target_folder)
         manager.run()
 
 def main():
@@ -56,8 +58,18 @@ def main():
     
     # Mode 1: Single task via CLI args
     if args.md_path and args.doc_token:
+        target_folder = None
         try:
-            run_single_task(args.md_path, args.doc_token, args.force, note="CLI Task")
+            # Try to load default folder from config if available
+            tasks = load_config(args.config)
+            if tasks and tasks[0].get("cloud"):
+                target_folder = tasks[0]["cloud"]
+                print(f"⚙️  自动从配置中读取目标文件夹: {target_folder}")
+        except:
+            pass
+
+        try:
+            run_single_task(args.md_path, args.doc_token, args.force, note="CLI Task", target_folder=target_folder)
         except Exception as e:
             print(f"❌ 任务失败: {e}")
             traceback.print_exc()
