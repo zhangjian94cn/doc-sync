@@ -12,6 +12,10 @@ Here is a sample image uploaded automatically:
 
 **Bold Text**, *Italic Text*, ~~Strikethrough~~, and `Inline Code`.
 
+## 2.1 Added Section - Update 9
+
+Testing unicode table alignment.
+
 ## 3. Code Blocks
 
 ```python

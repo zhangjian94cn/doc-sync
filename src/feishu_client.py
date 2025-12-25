@@ -373,103 +373,63 @@ class FeishuClient:
              return False
         return True
 
-    def add_blocks(self, document_id: str, blocks: List[Dict[str, Any]]):
+    def delete_blocks_by_index(self, document_id: str, start_index: int, end_index: int):
         """
-        Add blocks to the end of the document.
-        Handles both regular blocks (batch) and image blocks (transactional: create->upload->update).
+        Delete blocks by index range.
+        """
+        request = BatchDeleteDocumentBlockChildrenRequest.builder() \
+            .document_id(document_id) \
+            .block_id(document_id) \
+            .request_body(
+                BatchDeleteDocumentBlockChildrenRequestBody.builder()
+                .start_index(start_index)
+                .end_index(end_index)
+                .build()
+            ).build()
+            
+        response = self.client.docx.v1.document_block_children.batch_delete(request, self._get_request_option())
+        if not response.success():
+            print(f"Delete blocks failed: {response.code} {response.msg}")
+
+    def add_blocks(self, document_id: str, blocks: List[Dict[str, Any]], index: int = -1):
+        """
+        Add blocks to the document.
+        Args:
+            document_id: Doc ID
+            blocks: List of block dicts
+            index: Insertion index. -1 means append to end.
+        Optimized: Creates all blocks first (with placeholders for images), then concurrently uploads and updates images.
         """
         from lark_oapi.api.docx.v1.model import Block, Image as DocImage, CreateDocumentBlockChildrenRequest, CreateDocumentBlockChildrenRequestBody
+        import concurrent.futures
         
-        pending_blocks = []
+        # 1. Prepare all blocks for creation
+        # Identify which blocks are pending images
+        pending_image_tasks = [] # List of (index_in_created_blocks, image_path)
+        blocks_to_create = []
         
-        def flush_pending():
-            if not pending_blocks:
-                return
-            
-            # Create request for pending blocks
-            request = CreateDocumentBlockChildrenRequest.builder() \
-                .document_id(document_id) \
-                .block_id(document_id) \
-                .request_body(
-                    CreateDocumentBlockChildrenRequestBody.builder()
-                    .children(pending_blocks)
-                    .build()
-                ).build()
-            
-            resp = self.client.docx.v1.document_block_children.create(request, self._get_request_option())
-            if not resp.success():
-                 print(f"Create blocks failed: {resp.code} {resp.msg}")
-            
-            pending_blocks.clear()
-
-        for block_data in blocks:
-            # Check if it is our "Pending Upload Image"
+        for idx, block_data in enumerate(blocks):
+            # Check if it is a "Pending Upload Image"
             is_pending_image = False
             image_path = None
             
             if isinstance(block_data, dict) and block_data.get("block_type") == 27:
                 img_info = block_data.get("image", {})
                 token = img_info.get("token")
-                # If token is a valid path, it means we need to upload
-                # We check if it starts with / or is a known file
                 if token and isinstance(token, str) and (token.startswith("/") or os.path.exists(token)):
                      is_pending_image = True
                      image_path = token
             
             if is_pending_image:
-                # Flush existing text blocks first to maintain order
-                flush_pending()
-                
-                print(f"🖼️ 开始处理图片上传流程: {image_path}")
-                
-                # 1. Create Empty Image Block
-                # Use empty string as placeholder
+                # Create Empty Image Block Placeholder
                 empty_img = Block.builder().block_type(27).image(DocImage.builder().token("").build()).build()
-                
-                req_create = CreateDocumentBlockChildrenRequest.builder() \
-                    .document_id(document_id) \
-                    .block_id(document_id) \
-                    .request_body(CreateDocumentBlockChildrenRequestBody.builder().children([empty_img]).build()) \
-                    .build()
-                
-                resp_create = self.client.docx.v1.document_block_children.create(req_create, self._get_request_option())
-                
-                if not resp_create.success() or not resp_create.data or not resp_create.data.children:
-                    print(f"❌ 创建空图片块失败: {resp_create.code} {resp_create.msg}")
-                    continue
-                    
-                new_block_id = resp_create.data.children[0].block_id
-                # print(f"✅ 空图片块创建成功, ID: {new_block_id}")
-                
-                # 2. Upload Image using Block ID as parent_node
-                file_token = self.upload_image(image_path, new_block_id, drive_route_token=document_id)
-                
-                if file_token:
-                    print(f"✅ 图片上传成功, Token: {file_token}")
-                    
-                    # 3. Update Block
-                    if self.update_block_image(document_id, new_block_id, file_token):
-                         print(f"✅ 图片块更新成功")
-                    else:
-                         print(f"❌ 图片块更新失败")
-                else:
-                    print(f"❌ 图片上传失败")
-                    # Optionally delete the empty block or leave it?
-                    # Leaving it might be less destructive than deleting wrong things.
-            
+                blocks_to_create.append(empty_img)
+                pending_image_tasks.append({
+                    "list_index": len(blocks_to_create) - 1, # Index in the batch list
+                    "path": image_path
+                })
             else:
-                # Regular block or Image that already has a token (e.g. from cache? unlikely here)
-                # If it's an image block but not a path, maybe it's a real token.
-                # We just add it to pending.
-                
-                # Ensure we handle the Block object conversion if needed
-                # Previous code assumed SDK handles dicts or manual conversion
-                # We will reuse the logic: just append block_data
-                # But wait, previous code had manual conversion for BlockType 27 inside the loop
-                # to convert dict to Block object.
-                # If I just append dict, it might fail if SDK expects Block.
-                # So I should keep the conversion logic for safety.
-                
+                # Regular block
                 block_to_add = block_data
                 if isinstance(block_data, dict) and block_data.get("block_type") == 27:
                      img_data = block_data.get("image", {})
@@ -481,7 +441,78 @@ class FeishuClient:
                         if w: ib.width(w)
                         if h: ib.height(h)
                         block_to_add = Block.builder().block_type(27).image(ib.build()).build()
-                
-                pending_blocks.append(block_to_add)
+                blocks_to_create.append(block_to_add)
+
+        if not blocks_to_create:
+            return
+
+        # 2. Batch Create Blocks (Chunking if necessary, but SDK might handle or we assume < 50 for now? Feishu limit is usually 50)
+        # We need to chunk manually to be safe.
+        CHUNK_SIZE = 50
+        created_block_ids = []
         
-        flush_pending()
+        current_insert_index = index 
+        # If index is -1, it stays -1 (append). 
+        # If index is >= 0, we need to increment it for subsequent chunks?
+        # CreateDocumentBlockChildren documentation says "index": "插在指定的索引位置，-1表示插在最后".
+        # If we insert a chunk at index 0, the next chunk should be at index + len(chunk).
+        
+        for i in range(0, len(blocks_to_create), CHUNK_SIZE):
+            chunk = blocks_to_create[i:i + CHUNK_SIZE]
+            
+            req_body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(chunk)
+            if current_insert_index != -1:
+                req_body_builder.index(current_insert_index)
+                
+            request = CreateDocumentBlockChildrenRequest.builder() \
+                .document_id(document_id) \
+                .block_id(document_id) \
+                .request_body(req_body_builder.build()).build()
+            
+            resp = self.client.docx.v1.document_block_children.create(request, self._get_request_option())
+            if not resp.success():
+                 print(f"Create blocks chunk {i//CHUNK_SIZE} failed: {resp.code} {resp.msg}")
+                 # If creation fails, indices will be messed up. We abort.
+                 return
+            
+            if resp.data and resp.data.children:
+                for child in resp.data.children:
+                    created_block_ids.append(child.block_id)
+            
+            # Progress Indication
+            # print(f"✨ 已创建 {len(created_block_ids)}/{len(blocks_to_create)} 个文档块...")
+            
+            if current_insert_index != -1:
+                current_insert_index += len(chunk)
+        
+        # 3. Concurrent Upload & Update
+        if not pending_image_tasks:
+            return
+
+        print(f"🚀 开始并发上传 {len(pending_image_tasks)} 张图片...")
+        
+        def process_image_task(task):
+            idx = task["list_index"]
+            path = task["path"]
+            if idx >= len(created_block_ids):
+                return False
+            
+            block_id = created_block_ids[idx]
+            file_name = os.path.basename(path)
+            # print(f"  - Uploading {file_name} to Block {block_id}")
+            
+            # Upload
+            file_token = self.upload_image(path, block_id, drive_route_token=document_id)
+            if file_token:
+                # Update
+                if self.update_block_image(document_id, block_id, file_token):
+                    print(f"  - 📸 图片已就绪: {file_name}")
+                    return True
+            print(f"  - ❌ 图片处理失败: {file_name}")
+            return False
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(process_image_task, pending_image_tasks))
+            
+        success_count = sum(1 for r in results if r)
+        print(f"✅ 图片上传完成: {success_count}/{len(pending_image_tasks)} 成功")

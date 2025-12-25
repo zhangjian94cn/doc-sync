@@ -2,6 +2,12 @@ import argparse
 import json
 import os
 import traceback
+import sys
+import warnings
+
+# Filter out deprecated pkg_resources warning from third-party libraries
+warnings.filterwarnings("ignore", category=UserWarning, module='lark_oapi.ws.pb.google')
+
 from src.sync import SyncManager, FolderSyncManager
 from src.converter import MarkdownToFeishu
 from src.feishu_client import FeishuClient
