@@ -7,12 +7,33 @@ class MarkdownToFeishu:
         self.md = MarkdownIt()
         self.image_uploader = image_uploader
         
+    def _convert_wiki_links(self, text: str) -> str:
+        """
+        Convert Obsidian Wiki Links ![[image.png]] to Standard Markdown ![image.png](image.png)
+        Only handles image embeds (starting with !) for now.
+        """
+        # Pattern: ![[filename(|alt)]]
+        # Group 1: Filename
+        # Group 2: Optional Alt Text (captured without |)
+        pattern = re.compile(r'!\[\[(.*?)(?:\|(.*?))?\]\]')
+        
+        def replace(match):
+            filename = match.group(1).strip()
+            alt = match.group(2).strip() if match.group(2) else ""
+            return f"![{alt}]({filename})"
+            
+        return pattern.sub(replace, text)
+
     def _preprocess_markdown(self, text: str) -> str:
         """
         Pre-process markdown text to handle user-specific formatting preferences.
         Specifically, break "Lazy Continuation" of lists.
         If a line follows a list item but is not indented, insert a blank line to force a new block.
+        Also converts Obsidian Wiki Links to Standard Markdown.
         """
+        # 1. Convert Wiki Links first
+        text = self._convert_wiki_links(text)
+
         lines = text.split('\n')
         new_lines = []
         in_code_block = False
