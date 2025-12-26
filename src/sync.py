@@ -19,11 +19,11 @@ class SyncManager:
     """
     Handles synchronization of a single Markdown file with a Feishu Document.
     """
-    def __init__(self, md_path: str, doc_token: str, force: bool = False, target_folder: str = None):
+    def __init__(self, md_path: str, doc_token: str, force: bool = False, vault_root: str = None):
         self.md_path = md_path
         self.doc_token = doc_token
         self.force = force
-        self.target_folder = target_folder
+        self.vault_root = vault_root or os.path.dirname(md_path)
         self.client = FeishuClient(
             config.FEISHU_APP_ID, 
             config.FEISHU_APP_SECRET
@@ -36,12 +36,6 @@ class SyncManager:
         print(f"\n{'-'*30}")
         print(f"📄 任务: {os.path.basename(self.md_path)}")
         print(f"{'-'*30}")
-
-        if self.target_folder:
-            # Ensure doc is in the target folder
-            # print(f"🚚 确保文档在目标文件夹: {self.target_folder}...")
-            # self.client.move_file(self.doc_token, self.target_folder)
-            pass
 
         if not os.path.exists(self.md_path):
             print(f"❌ 错误: 未找到文件: {self.md_path}")
@@ -159,16 +153,30 @@ class SyncManager:
             
         # Define image uploader callback
         def image_uploader(src: str) -> Optional[str]:
-            # Resolve path
-            if os.path.isabs(src):
-                abs_path = src
-            else:
-                abs_path = os.path.join(os.path.dirname(self.md_path), src)
+            # Resolve path strategies
             
-            if os.path.exists(abs_path):
-                return abs_path
+            # 1. Check if it's already an absolute path and exists
+            if os.path.isabs(src) and os.path.exists(src):
+                return src
+                
+            # 2. Check relative to MD file (Standard Markdown)
+            path_rel_md = os.path.join(os.path.dirname(self.md_path), src)
+            if os.path.exists(path_rel_md):
+                return path_rel_md
             
-            print(f"❌ 图片未找到: {abs_path}")
+            # 3. Check relative to Vault Root (Obsidian Style)
+            # If vault_root is set, try resolving from there
+            if self.vault_root:
+                path_rel_vault = os.path.join(self.vault_root, src)
+                if os.path.exists(path_rel_vault):
+                    return path_rel_vault
+                
+                # 4. Check in 'assets' folder in Vault Root (Common convention)
+                path_assets = os.path.join(self.vault_root, "assets", os.path.basename(src))
+                if os.path.exists(path_assets):
+                    return path_assets
+            
+            print(f"❌ 图片未找到: {src}")
             return None
 
         converter = MarkdownToFeishu(image_uploader=image_uploader)
@@ -463,10 +471,11 @@ class FolderSyncManager:
     """
     Handles recursive synchronization of a local folder with a Feishu Cloud Folder.
     """
-    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False):
+    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, vault_root: str = None):
         self.local_root = local_root
         self.cloud_root_token = cloud_root_token
         self.force = force
+        self.vault_root = vault_root or local_root
         self.client = FeishuClient(
             config.FEISHU_APP_ID, 
             config.FEISHU_APP_SECRET
@@ -559,7 +568,7 @@ class FolderSyncManager:
                     # Sync
                     c_file = cloud_map[doc_name]
                     if c_file.type == "docx":
-                        sync = SyncManager(item_path, c_file.token, self.force, target_folder=cloud_token)
+                        sync = SyncManager(item_path, c_file.token, self.force, vault_root=self.vault_root)
                         sync.run()
                     else:
                         print(f"⚠️ 警告: 名称冲突。本地是 .md 文件，但云端是 {c_file.type}。跳过。")
@@ -571,5 +580,5 @@ class FolderSyncManager:
                         print(f"✨ 已创建文档 {doc_name} ({new_token}), 开始同步内容...")
                         
                         # Newly created doc needs force upload to bypass timestamp check
-                        sync = SyncManager(item_path, new_token, force=True, target_folder=cloud_token)
+                        sync = SyncManager(item_path, new_token, force=True, vault_root=self.vault_root)
                         sync.run()
