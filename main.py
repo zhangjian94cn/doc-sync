@@ -4,6 +4,7 @@ import os
 import traceback
 import sys
 import warnings
+from typing import Optional
 
 # Filter out deprecated pkg_resources warning from third-party libraries
 warnings.filterwarnings("ignore", category=UserWarning, module='lark_oapi.ws.pb.google')

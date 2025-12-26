@@ -1,5 +1,6 @@
-from typing import List, Dict, Any, Optional
 import re
+import os
+from typing import List, Dict, Any, Optional
 from markdown_it import MarkdownIt
 
 class MarkdownToFeishu:
@@ -20,6 +21,11 @@ class MarkdownToFeishu:
         def replace(match):
             filename = match.group(1).strip()
             alt = match.group(2).strip() if match.group(2) else ""
+            
+            # Fix: URL Encode filename to handle spaces which are invalid in standard Markdown links
+            # Only encode spaces for now as other chars might be valid in paths
+            filename = filename.replace(" ", "%20")
+            
             return f"![{alt}]({filename})"
             
         return pattern.sub(replace, text)

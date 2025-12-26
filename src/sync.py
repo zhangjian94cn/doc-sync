@@ -5,6 +5,7 @@ import shutil
 from datetime import datetime
 from typing import Optional
 from enum import IntEnum
+from urllib.parse import unquote
 
 import config
 from src.feishu_client import FeishuClient
@@ -19,6 +20,9 @@ class SyncManager:
     """
     Handles synchronization of a single Markdown file with a Feishu Document.
     """
+    # Cache for vault asset index: { vault_root: { filename: full_path } }
+    _asset_index_cache = {}
+
     def __init__(self, md_path: str, doc_token: str, force: bool = False, vault_root: str = None):
         self.md_path = md_path
         self.doc_token = doc_token
@@ -28,6 +32,32 @@ class SyncManager:
             config.FEISHU_APP_ID, 
             config.FEISHU_APP_SECRET
         )
+
+    def _get_asset_path_from_index(self, filename: str) -> Optional[str]:
+        """
+        Look up file path in the vault-wide asset index.
+        """
+        if not self.vault_root:
+            return None
+            
+        # Initialize cache if needed
+        if self.vault_root not in SyncManager._asset_index_cache:
+            print(f"🔍 正在建立 Vault 资源索引 (首次运行): {self.vault_root} ...")
+            asset_map = {}
+            for root, dirs, files in os.walk(self.vault_root):
+                # Skip hidden folders
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for f in files:
+                    if f.startswith('.'): continue
+                    # Index media and typical attachments
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', 
+                                         '.pdf', '.mp4', '.mov', '.avi', '.mkv', '.zip', '.docx', '.xlsx', '.pptx')):
+                        asset_map[f] = os.path.join(root, f)
+            
+            print(f"📚 索引完成，共 {len(asset_map)} 个资源文件。")
+            SyncManager._asset_index_cache[self.vault_root] = asset_map
+            
+        return SyncManager._asset_index_cache[self.vault_root].get(filename)
         
     def run(self):
         """
@@ -153,6 +183,9 @@ class SyncManager:
             
         # Define image uploader callback
         def image_uploader(src: str) -> Optional[str]:
+            # Decode URL encoded chars (e.g. %20 -> space)
+            src = unquote(src)
+
             # Resolve path strategies
             
             # 1. Check if it's already an absolute path and exists
@@ -175,6 +208,12 @@ class SyncManager:
                 path_assets = os.path.join(self.vault_root, "assets", os.path.basename(src))
                 if os.path.exists(path_assets):
                     return path_assets
+
+            # 5. Last Resort: Vault-wide search (Obsidian fuzzy link)
+            filename = os.path.basename(src)
+            path_from_index = self._get_asset_path_from_index(filename)
+            if path_from_index and os.path.exists(path_from_index):
+                 return path_from_index
             
             print(f"❌ 图片未找到: {src}")
             return None
