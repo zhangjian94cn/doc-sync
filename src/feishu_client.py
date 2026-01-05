@@ -25,6 +25,7 @@ class FeishuClient:
             .app_id(app_id) \
             .app_secret(app_secret) \
             .enable_set_token(True) \
+            .log_level(lark.LogLevel.INFO) \
             .build()
             
         print(f"[认证] 已初始化 App ID: {app_id[:5]}***")
@@ -366,7 +367,12 @@ class FeishuClient:
                 .build()
             ).build()
             
-        response = self.client.docx.v1.document.create(request, self._get_request_option())
+        option = self._get_request_option()
+        token_type = "User Token" if option and option.user_access_token else "Tenant Token"
+        token_preview = option.user_access_token[:5] if option and option.user_access_token else "N/A"
+        print(f"🔧 [Debug] Creating Docx using {token_type} ({token_preview}...)")
+        
+        response = self.client.docx.v1.document.create(request, option)
         
         if not response.success():
              print(f"Create docx failed: {response.code} {response.msg}")

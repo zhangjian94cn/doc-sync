@@ -77,9 +77,37 @@ def main():
     
     args = parser.parse_args()
     
+    # Check Auth and Login if needed
+    user_token = FEISHU_USER_ACCESS_TOKEN
+    
+    if not user_token and sys.stdin.isatty():
+        print("⚠️  未检测到 User Access Token (推荐用于解决权限问题)。")
+        # Check if we should prompt
+        # For simplicity, let's just hint user to use setup script or auto login here?
+        # Let's try auto login integration.
+        try:
+            choice = input("是否立即登录飞书以获取用户权限? (y/n) [y]: ").lower()
+            if choice in ('', 'y'):
+                from src.auth import FeishuAuthenticator
+                auth = FeishuAuthenticator()
+                new_token = auth.login()
+                if new_token:
+                    user_token = new_token
+                    # Update config module in memory is tricky if imported as from config import ...
+                    # But we passed user_token to FeishuClient below, so it's fine for this run.
+        except KeyboardInterrupt:
+            print("\n🚫 操作取消")
+            return
+
     # Init Client
     # Pass USER_ACCESS_TOKEN if available, otherwise it defaults to Tenant Token
-    client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=FEISHU_USER_ACCESS_TOKEN)
+    client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
+    
+    # Note: We need to ensure SyncManager also uses this token.
+    # SyncManager currently imports from config.py directly.
+    # So we MUST update config module.
+    import config
+    config.FEISHU_USER_ACCESS_TOKEN = user_token
     
     # Mode 1: Single task via CLI args
     if args.md_path and args.doc_token:

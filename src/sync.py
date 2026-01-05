@@ -30,7 +30,8 @@ class SyncManager:
         self.vault_root = vault_root or os.path.dirname(md_path)
         self.client = FeishuClient(
             config.FEISHU_APP_ID, 
-            config.FEISHU_APP_SECRET
+            config.FEISHU_APP_SECRET,
+            user_access_token=config.FEISHU_USER_ACCESS_TOKEN
         )
 
     def _get_asset_path_from_index(self, filename: str) -> Optional[str]:
@@ -517,7 +518,8 @@ class FolderSyncManager:
         self.vault_root = vault_root or local_root
         self.client = FeishuClient(
             config.FEISHU_APP_ID, 
-            config.FEISHU_APP_SECRET
+            config.FEISHU_APP_SECRET,
+            user_access_token=config.FEISHU_USER_ACCESS_TOKEN
         )
         
         # Stats
