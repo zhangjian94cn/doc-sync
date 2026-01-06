@@ -7,17 +7,20 @@ class MarkdownToFeishu:
     def __init__(self, image_uploader=None):
         self.md = MarkdownIt()
         self.image_uploader = image_uploader
+        self.list_depth = 0
         
+        # Compile Regex Patterns
+        self.wiki_link_pattern = re.compile(r'!\[\[(.*?)(?:\|(.*?))?\]\]')
+        # Matches: "- ", "* ", "+ ", "1. ", "10. "
+        self.list_item_pattern = re.compile(r'^(\s*)([-*+]|\d+\.)\s+')
+        # Matches: "  1. " or "   1. "
+        self.weak_indent_pattern = re.compile(r'^( {2,3})(\d+\.|[-*+])\s+')
+
     def _convert_wiki_links(self, text: str) -> str:
         """
         Convert Obsidian Wiki Links ![[image.png]] to Standard Markdown ![image.png](image.png)
         Only handles image embeds (starting with !) for now.
         """
-        # Pattern: ![[filename(|alt)]]
-        # Group 1: Filename
-        # Group 2: Optional Alt Text (captured without |)
-        pattern = re.compile(r'!\[\[(.*?)(?:\|(.*?))?\]\]')
-        
         def replace(match):
             filename = match.group(1).strip()
             alt = match.group(2).strip() if match.group(2) else ""
@@ -28,7 +31,7 @@ class MarkdownToFeishu:
             
             return f"![{alt}]({filename})"
             
-        return pattern.sub(replace, text)
+        return self.wiki_link_pattern.sub(replace, text)
 
     def _preprocess_markdown(self, text: str) -> str:
         """
@@ -44,22 +47,28 @@ class MarkdownToFeishu:
         new_lines = []
         in_code_block = False
         
-        # Regex to detect list item start
-        # Matches: "- ", "* ", "+ ", "1. ", "10. "
-        list_pattern = re.compile(r'^(\s*)([-*+]|\d+\.)\s+')
-        
         for i, line in enumerate(lines):
             # Toggle code block (simple detection)
             if line.strip().startswith('```'):
                 in_code_block = not in_code_block
-                
+            
+            if not in_code_block:
+                # Hack: Fix weak indentation for nested lists
+                # Markdown standard usually requires 4 spaces or tab for ordered lists.
+                # If we see 2 or 3 spaces indentation for a list item, verify if we should boost it to 4.
+                match = self.weak_indent_pattern.match(line)
+                if match:
+                    current_indent_len = len(match.group(1))
+                    needed = 4 - current_indent_len
+                    line = " " * needed + line
+
             if i > 0 and not in_code_block:
                 prev_line = lines[i-1]
                 
                 # If previous line looks like a list item
-                if list_pattern.match(prev_line):
+                if self.list_item_pattern.match(prev_line):
                     # And current line is NOT empty, NOT a list item, and NOT indented
-                    is_curr_list = list_pattern.match(line)
+                    is_curr_list = self.list_item_pattern.match(line)
                     is_curr_empty = not line.strip()
                     is_curr_indented = line.startswith(' ') or line.startswith('\t')
                     
@@ -96,6 +105,9 @@ class MarkdownToFeishu:
         tokens = self.md.parse(text)
         blocks = []
         
+        self.current_block_type = 2 # Default Text
+        self.list_depth = 0
+        
         # State to track list context
         list_stack = [] # 'bullet' or 'ordered'
         
@@ -122,15 +134,21 @@ class MarkdownToFeishu:
                 
             elif token.type == 'bullet_list_open':
                 list_stack.append('bullet')
+                self.current_block_type = 12
+                self.list_depth += 1
                 
             elif token.type == 'bullet_list_close':
                 if list_stack: list_stack.pop()
+                self.list_depth = max(0, self.list_depth - 1)
                 
             elif token.type == 'ordered_list_open':
                 list_stack.append('ordered')
+                self.current_block_type = 13
+                self.list_depth += 1
                 
             elif token.type == 'ordered_list_close':
                 if list_stack: list_stack.pop()
+                self.list_depth = max(0, self.list_depth - 1)
                 
             elif token.type == 'list_item_open':
                 pass # Just a container
@@ -152,9 +170,22 @@ class MarkdownToFeishu:
                         block_type = 2
                         
                     field_name = self._get_block_field_name(block_type)
+                    block_content = self._create_text_elements_from_token(inline_token)
+
+                    # Handle nested list indentation
+                    # Feishu Docx API V1 does not support nested lists in batch create.
+                    # We simulate nesting by prepending full-width spaces.
+                    list_depth = len(list_stack)
+                    if list_depth > 1:
+                        indent = "　" * (list_depth - 1)
+                        if block_content.get("elements"):
+                            elems = block_content["elements"]
+                            if elems and "text_run" in elems[0]:
+                                elems[0]["text_run"]["content"] = indent + elems[0]["text_run"]["content"]
+
                     blocks.append({
                         "block_type": block_type,
-                        field_name: self._create_text_elements_from_token(inline_token)
+                        field_name: block_content
                     })
                 else:
                     # Regular paragraph - handle mixed text and images
@@ -169,8 +200,6 @@ class MarkdownToFeishu:
                 if content.endswith('\n'):
                     content = content[:-1]
                     
-                # SDK defines code block as Text object, implying flat structure?
-                # Trying to fit SDK model: code -> elements
                 blocks.append({
                     "block_type": 14, # Code
                     "code": {
@@ -178,8 +207,6 @@ class MarkdownToFeishu:
                     }
                 })
                 
-            # Handle other types or ignore
-            
             i += 1
             
         return blocks
@@ -237,13 +264,12 @@ class MarkdownToFeishu:
                 
                 if src and self.image_uploader:
                     # Reuse image_uploader callback for generic file resolving
-                    print(f"� 发现资源引用 ({ext}), 准备处理: {src}")
+                    print(f" 发现资源引用 ({ext}), 准备处理: {src}")
                     file_path = self.image_uploader(src)
                     
                     if file_path:
                         if is_media_file:
                             # File Block (Type 23)
-                            # Note: Feishu Doc uses File Block for videos/files uploaded locally
                             blocks.append({
                                 "block_type": 23, # File
                                 "file": {
@@ -331,15 +357,6 @@ class MarkdownToFeishu:
             }]
             
         return blocks
-
-    def _create_element_from_child(self, child) -> Optional[Dict[str, Any]]:
-        # Deprecated / Not used in this implementation
-        return None 
-
-    # Re-implementing _create_text_elements_from_token to use a generator or shared logic would be better.
-    # Let's stick to the previous monolithic loop but break on image.
-    
-    # ... Wait, I need to fix _process_inline_content to handle styles correctly ...
 
     def _create_text_elements_from_token(self, inline_token) -> Dict[str, Any]:
         """

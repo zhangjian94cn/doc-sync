@@ -6,10 +6,12 @@ from datetime import datetime
 from typing import Optional
 from enum import IntEnum
 from urllib.parse import unquote
+import difflib
 
 import config
 from src.feishu_client import FeishuClient
 from src.converter import MarkdownToFeishu, FeishuToMarkdown
+from src.utils import calculate_block_hash, pad_center, parse_cloud_time
 
 class SyncResult(IntEnum):
     SUCCESS = 0
@@ -88,7 +90,7 @@ class SyncManager:
                 print("🚫 操作终止。请使用 --force 参数强制继续。")
                 sys.exit(1)
         else:
-            cloud_mtime = self._parse_cloud_time(file_info.latest_modify_time)
+            cloud_mtime = parse_cloud_time(file_info.latest_modify_time)
             print(f"☁️ 云端文档修改时间: {datetime.fromtimestamp(cloud_mtime)}")
             
             if cloud_mtime > local_mtime:
@@ -115,15 +117,6 @@ class SyncManager:
         if should_upload:
             self._sync_local_to_cloud()
 
-    def _parse_cloud_time(self, timestamp) -> float:
-        """
-        Heuristic to detect if timestamp is in milliseconds or seconds.
-        """
-        ts = int(timestamp)
-        if ts > 10000000000:
-            return ts / 1000.0
-        return float(ts)
-
     def _sync_cloud_to_local(self) -> SyncResult:
         """
         Downloads cloud content and overwrites local file.
@@ -141,6 +134,9 @@ class SyncManager:
             def image_downloader(token: str) -> Optional[str]:
                 # Assets folder: ./assets
                 assets_dir = os.path.join(os.path.dirname(self.md_path), "assets")
+                if not os.path.exists(assets_dir):
+                    os.makedirs(assets_dir)
+                    
                 filename = f"{token}.png" # Default to png
                 save_path = os.path.join(assets_dir, filename)
                 
@@ -174,10 +170,6 @@ class SyncManager:
         Reads local file, converts to blocks, and uploads to Feishu.
         Implements incremental sync (Diff) strategy.
         """
-        import hashlib
-        import difflib
-        import json
-        
         print("🔄 正在将 Markdown 转换为飞书文档块...")
         with open(self.md_path, "r", encoding="utf-8") as f:
             md_text = f.read()
@@ -199,7 +191,6 @@ class SyncManager:
                 return path_rel_md
             
             # 3. Check relative to Vault Root (Obsidian Style)
-            # If vault_root is set, try resolving from there
             if self.vault_root:
                 path_rel_vault = os.path.join(self.vault_root, src)
                 if os.path.exists(path_rel_vault):
@@ -229,194 +220,18 @@ class SyncManager:
         print(f"🔍 获取云端现有内容以进行比对...")
         cloud_blocks_raw = self.client.get_all_blocks(self.doc_token)
         
-        # 2. Hash Calculation Helper
-        def get_block_hash(block_data, is_cloud_obj=False):
-            """
-            Compute a hash for block content to compare equality.
-            Ignores IDs, revision info, and irrelevant styles.
-            """
-            # This is a simplified hashing strategy. 
-            # Ideally we should canonicalize the content structure.
-            # For now, we dump specific fields to JSON string and hash it.
-            
-            content_fingerprint = {}
-            
-            if is_cloud_obj:
-                # Map Cloud Object to simplified dict
-                b_type = block_data.block_type
-                content_fingerprint["type"] = b_type
-                
-                # Extract content based on type
-                # This mapping must match what MarkdownToFeishu produces
-                attr_map = {
-                    2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
-                    6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
-                    10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
-                    14: "code", 22: "todo", 23: "file", 27: "image"
-                }
-                
-                attr_name = attr_map.get(b_type)
-                if attr_name and hasattr(block_data, attr_name):
-                    attr_obj = getattr(block_data, attr_name)
-                    if attr_obj:
-                        # Improved serialization for SDK objects
-                        if hasattr(attr_obj, "to_dict"):
-                             content_fingerprint["content"] = attr_obj.to_dict()
-                        elif hasattr(attr_obj, "__dict__"):
-                             # Some SDK objects might not have to_dict but have __dict__
-                             # Filter private attributes
-                             content_fingerprint["content"] = {k: v for k, v in attr_obj.__dict__.items() if not k.startswith('_')}
-                        else:
-                             # Fallback
-                             content_fingerprint["content"] = str(attr_obj)
-                
-                # Special handling for Image Block to make it comparable
-                # Cloud returns: {token: "...", width: ..., height: ...}
-                # Local has: {token: "path/to/local/file", ...}
-                # They will NEVER match if we compare token directly.
-                if b_type == 27:
-                    # We can't compare token. So we ignore token in hash?
-                    # But if image CHANGED, we need to detect it.
-                    # Since we can't map Cloud Token -> Local Path, we assume:
-                    # If everything else matches (position in doc, maybe surrounding text?), it's the same?
-                    # No, that's risky.
-                    
-                    # Alternative: We mark all Image blocks as "Same" (Equal) tentatively?
-                    # No, then we never update images.
-                    
-                    # Current constraint: We CANNOT know if a cloud image matches a local image without extra metadata.
-                    # Hack: For now, we EXCLUDE image token from hash. 
-                    # This means: "If there is an image here, and there was an image here, we assume it's the same."
-                    # This fixes the re-upload issue, BUT means changing the image file (keeping same name/location) won't trigger update.
-                    # To fix THAT, user needs to delete the block or we need metadata.
-                    # Let's try ignoring token for Image blocks.
-                    
-                    if isinstance(content_fingerprint.get("content"), dict):
-                        content_fingerprint["content"].pop("token", None)
-                        
-            else:
-                # Local Block Dict
-                b_type = block_data.get("block_type")
-                content_fingerprint["type"] = b_type
-                
-                # Extract content key
-                # Keys in local_blocks are like "text", "heading1", etc.
-                for k, v in block_data.items():
-                    if k != "block_type" and k != "alt":
-                        # Use deep copy to avoid modifying original data when popping token later
-                        if isinstance(v, dict):
-                            content_fingerprint["content"] = v.copy()
-                        else:
-                            content_fingerprint["content"] = v
-                        break
-                
-                # Special handling for Image Block (Local)
-                if b_type == 27:
-                    # Remove token (path) from hash to match cloud behavior
-                    if isinstance(content_fingerprint.get("content"), dict):
-                        content_fingerprint["content"].pop("token", None)
-            
-            # Normalize: sort keys, remove None, handle objects, remove defaults
-            def clean_dict(d, is_cloud=False):
-                if hasattr(d, "to_dict"):
-                    d = d.to_dict()
-                elif hasattr(d, "__dict__"):
-                    d = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-
-                if isinstance(d, dict):
-                    new_d = {}
-                    for k, v in d.items():
-                        # 1. Ignore "style" field (block style, alignment, etc.)
-                        if k == "style":
-                            continue
-                        
-                        # 2. Ignore "text_element_style" if all values are false/None
-                        # Or better: Recursively clean it.
-                        
-                        clean_v = clean_dict(v, is_cloud)
-                        
-                        # 3. Filter false/None values in text_element_style or general
-                        if v is None:
-                            continue
-                        
-                        # Specific logic for text_element_style to remove default false values
-                        if k == "text_element_style" and isinstance(clean_v, dict):
-                            # Remove keys with False values
-                            clean_v = {sk: sv for sk, sv in clean_v.items() if sv}
-                            if not clean_v:
-                                continue # Skip empty style
-                        
-                        if clean_v == {} or clean_v == [] or clean_v is None:
-                             # Skip empty dicts/lists? 
-                             # Be careful. Local might have empty dict for some reason?
-                             # Image content in local became empty dict after popping token.
-                             pass
-
-                        new_d[k] = clean_v
-                    
-                    # 4. Special handling for Code Block content merging
-                    # Cloud splits code into lines in elements. Local has one text_run.
-                    # We can't easily merge here without knowing parent type.
-                    # But we can try to normalize "elements" if it's a list of text_runs.
-                    
-                    return new_d
-                
-                if isinstance(d, list):
-                    return [clean_dict(x, is_cloud) for x in d]
-                
-                return d
-
-            # Pre-process content to handle Code Block merging and Image emptying
-            def preprocess_content(block_type, content_dict):
-                # 1. Image / File: Empty it
-                if block_type == 27 or block_type == 23:
-                    return {}
-                
-                # 2. Code: Merge elements text
-                if block_type == 14:
-                    if "elements" in content_dict:
-                        full_text = ""
-                        for el in content_dict["elements"]:
-                            if "text_run" in el and "content" in el["text_run"]:
-                                full_text += el["text_run"]["content"]
-                        return {"elements": [{"text_run": {"content": full_text}}]}
-                        
-                return content_dict
-
-            clean_fp = clean_dict(content_fingerprint, is_cloud_obj)
-            
-            if isinstance(clean_fp.get("content"), dict):
-                clean_fp["content"] = preprocess_content(clean_fp.get("type"), clean_fp["content"])
-            
-            # Remove empty fields from top level
-            if isinstance(clean_fp, dict):
-                 clean_fp = {k: v for k, v in clean_fp.items() if v}
-
-            return hashlib.md5(json.dumps(clean_fp, sort_keys=True, default=lambda x: str(x)).encode('utf-8')).hexdigest()
-
-        # 3. Compute Hashes
-        cloud_hashes = [get_block_hash(b, is_cloud_obj=True) for b in cloud_blocks_raw]
-        local_hashes = [get_block_hash(b, is_cloud_obj=False) for b in local_blocks]
+        # 2. Compute Hashes
+        cloud_hashes = [calculate_block_hash(b, is_cloud_obj=True) for b in cloud_blocks_raw]
+        local_hashes = [calculate_block_hash(b, is_cloud_obj=False) for b in local_blocks]
         
-        # 4. Calculate Diff
+        # 3. Calculate Diff
         sm = difflib.SequenceMatcher(None, cloud_hashes, local_hashes)
         opcodes = sm.get_opcodes()
         
-        # Analysis of operations
-        # opcodes: list of (tag, i1, i2, j1, j2)
-        # tag: 'replace', 'delete', 'insert', 'equal'
-        
         ops_count = 0
-        diff_strategy_feasible = True
-        
         for tag, i1, i2, j1, j2 in opcodes:
             if tag != 'equal':
                 ops_count += 1
-        
-        # Threshold: If changes are too fragmented (> 10 chunks of changes), fallback to Full Sync
-        # Because we don't have Batch Update, lots of small updates are slow.
-        # Batch Insert/Delete are supported though.
-        # But 'replace' = delete + insert.
         
         if ops_count == 0:
             print("✅ 文档内容一致，无需更新。")
@@ -431,31 +246,11 @@ class SyncManager:
         else:
             print("⚡️ 使用增量同步模式...")
             
-            # Helper to pad string with display width awareness
-            def pad_center(text, width):
-                # Calculate display width: ASCII=1, Others(CJK)=2
-                display_len = 0
-                for char in text:
-                    if ord(char) > 127:
-                        display_len += 2
-                    else:
-                        display_len += 1
-                
-                padding = width - display_len
-                if padding <= 0:
-                    return text
-                
-                left = padding // 2
-                right = padding - left
-                return " " * left + text + " " * right
-
             # Table Header
-            # Define column widths (Display Width)
             w_type = 8
             w_cloud = 12
             w_local = 12
             
-            # 1. Print Diff Table (Plan)
             print(f"  ┌{'─'*w_type}┬{'─'*w_cloud}┬{'─'*w_local}┐")
             print(f"  │{pad_center('类型', w_type)}│{pad_center('云端块索引', w_cloud)}│{pad_center('本地块索引', w_local)}│")
             print(f"  ├{'─'*w_type}┼{'─'*w_cloud}┼{'─'*w_local}┤")
@@ -471,35 +266,24 @@ class SyncManager:
                 action_map = {'delete': '🔴 删除', 'insert': '🟢 插入', 'replace': '🟡 替换'}
                 icon = action_map.get(tag, tag)
                 
-                # Format ranges
                 c_range = f"{i1:02d}-{i2:02d}"
                 l_range = f"{j1:02d}-{j2:02d}"
                 
-                # Print row
                 print(f"  │{pad_center(icon, w_type)}│{pad_center(c_range, w_cloud)}│{pad_center(l_range, w_local)}│")
                 
                 ops_to_exec.append((tag, i1, i2, j1, j2))
             
-            # Table Footer
             print(f"  └{'─'*w_type}┴{'─'*w_cloud}┴{'─'*w_local}┘")
             
-            # 2. Execute Operations
             print("🚀 开始执行同步操作...")
             for tag, i1, i2, j1, j2 in ops_to_exec: # Order is already reversed
                 if tag == 'delete':
-                    # Cloud blocks [i1:i2] need to be deleted.
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
-                    
                 elif tag == 'insert':
-                    # Insert local blocks [j1:j2] at cloud index i1.
                     blocks_to_insert = local_blocks[j1:j2]
                     self.client.add_blocks(self.doc_token, blocks_to_insert, index=i1)
-                    
                 elif tag == 'replace':
-                    # Replace = Delete + Insert
-                    # 1. Delete old
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
-                    # 2. Insert new at i1
                     blocks_to_insert = local_blocks[j1:j2]
                     self.client.add_blocks(self.doc_token, blocks_to_insert, index=i1)
 
@@ -567,14 +351,10 @@ class FolderSyncManager:
         """
         Recursively syncs files and subfolders.
         """
-        # 1. List cloud files in this folder
-        # Only print scanning log if it's the root or we want verbose logs
-        # print(f"🔍 正在扫描云端文件夹: {cloud_token}...")
         cloud_files = self.client.list_folder_files(cloud_token)
         # Map: name -> (token, type)
         cloud_map = {f.name: f for f in cloud_files}
 
-        # 2. Iterate local files
         items = sorted(os.listdir(local_path))
         for item in items:
             if item.startswith('.'): continue # Skip hidden
@@ -584,14 +364,11 @@ class FolderSyncManager:
             if os.path.isdir(item_path):
                 # Handle Folder
                 if item in cloud_map:
-                    # Check if it is a folder
                     if cloud_map[item].type == "folder":
-                        # print(f"📂 进入子文件夹: {item}")
                         self._sync_folder(item_path, cloud_map[item].token)
                     else:
                         print(f"⚠️ 警告: 名称冲突。本地是文件夹，但云端是 {cloud_map[item].type}。跳过: {item}。")
                 else:
-                    # Create folder
                     print(f"📁 正在创建云端文件夹: {item}")
                     new_token = self.client.create_folder(cloud_token, item)
                     if new_token:
