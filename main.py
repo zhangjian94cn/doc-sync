@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='lark_oapi.ws.pb.
 from src.sync import SyncManager, FolderSyncManager
 from src.converter import MarkdownToFeishu
 from src.feishu_client import FeishuClient
+from src.logger import logger
 from config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
 import sys
 
@@ -38,34 +39,81 @@ def find_vault_root(path: str) -> Optional[str]:
             return None
         current = parent
 
-def run_single_task(local_path, cloud_token, force, note="", target_folder=None, vault_root=None):
+def run_single_task(local_path, cloud_token, force, note="", target_folder=None, vault_root=None, debug=False, client: FeishuClient = None):
     """
     Determines whether the task is a folder or file sync and runs the appropriate manager.
     """
     if note:
-        print(f"\n=== 📌 处理任务: {note} ===")
+        logger.header(f"处理任务: {note}", icon="📌")
     else:
-        print(f"\n=== 📌 处理任务: {local_path} -> {cloud_token} ===")
+        logger.header(f"处理任务: {local_path} -> {cloud_token}", icon="📌")
         
-    print(f"📍 本地路径: {local_path}")
-    print(f"☁️  云端 Token: {cloud_token}")
+    logger.info(f"本地路径: {local_path}", icon="📍")
+    logger.info(f"云端 Token: {cloud_token}", icon="☁️ ")
 
     # Auto-detect Vault Root if not provided
     if not vault_root:
         vault_root = find_vault_root(local_path)
         if vault_root:
-             print(f"🏠 自动检测到 Vault Root: {vault_root}")
+             logger.info(f"自动检测到 Vault Root: {vault_root}", icon="🏠")
+
+    # Ensure client
+    if not client:
+        client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=FEISHU_USER_ACCESS_TOKEN)
 
     if os.path.isdir(local_path):
-        print(f"📂 任务类型: 文件夹同步")
-        manager = FolderSyncManager(local_path, cloud_token, force, vault_root=vault_root)
+        logger.info(f"任务类型: 文件夹同步", icon="📂")
+        manager = FolderSyncManager(local_path, cloud_token, force, vault_root=vault_root, debug=debug, client=client)
         manager.run()
     else:
-        print(f"📄 任务类型: 单文件同步")
+        # Check if cloud_token is a folder or doc
+        
+        doc_token = cloud_token
+        is_folder = False
+        
+        # Check type - Try folder first
+        logger.debug(f"正在检测 Token 类型: {cloud_token}", icon="🔍")
+        file_info = client.get_file_info(cloud_token, obj_type="folder")
+        
+        if file_info and file_info.doc_type == "folder":
+            is_folder = True
+            logger.success("识别为文件夹", icon="📂")
+        else:
+            # Fallback to check if it's a docx
+            file_info_doc = client.get_file_info(cloud_token, obj_type="docx")
+            if file_info_doc:
+                logger.success(f"识别为文档 (Type: {file_info_doc.doc_type})", icon="📄")
+                is_folder = False
+            else:
+                logger.warning("无法识别 Token 类型，将尝试作为文档处理...")
+                is_folder = False
+            
+        if is_folder:
+            logger.info(f"检测到目标 Token 是文件夹，正在查找/创建同名文档...", icon="📂")
+            doc_name = os.path.basename(local_path)
+            if doc_name.endswith(".md"): doc_name = doc_name[:-3]
+            
+            files = client.list_folder_files(cloud_token)
+            target_doc = next((f for f in files if f.name == doc_name and f.type == "docx"), None)
+            
+            if target_doc:
+                doc_token = target_doc.token
+                logger.success(f"找到现有文档: {doc_name} ({doc_token})", icon="✅")
+            else:
+                logger.info(f"创建新文档: {doc_name}", icon="📝")
+                new_token = client.create_docx(cloud_token, doc_name)
+                if new_token:
+                    doc_token = new_token
+                    force = True # Force upload for new doc
+                else:
+                    logger.error("创建文档失败，中止。")
+                    return
+
+        logger.info(f"任务类型: 单文件同步", icon="📄")
         if target_folder:
-            print(f"📂 目标文件夹: {target_folder}")
-        manager = SyncManager(local_path, cloud_token, force, vault_root=vault_root)
-        manager.run()
+            logger.info(f"目标文件夹: {target_folder}", icon="📂")
+        manager = SyncManager(local_path, doc_token, force, vault_root=vault_root, client=client)
+        manager.run(debug=debug)
 
 def main():
     parser = argparse.ArgumentParser(description="Sync Obsidian Markdown to Feishu Doc")
@@ -74,14 +122,91 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force upload even if cloud version is newer")
     parser.add_argument("--config", default="sync_config.json", help="Path to sync config file (default: sync_config.json)")
     parser.add_argument("--vault-root", help="Explicitly set the Obsidian Vault Root path (for resolving absolute resource links)")
+    parser.add_argument("--clean", action="store_true", help="Clean up backup files (*.bak.*) recursively")
+    parser.add_argument("--debug-dump", action="store_true", help="Verify cloud structure after sync (Debug)")
     
     args = parser.parse_args()
     
+    # Mode: Clean Backups
+    if args.clean:
+        target_path = args.md_path or "."
+        # If no path arg, try to use the first local path from config
+        if not args.md_path and os.path.exists(args.config):
+            try:
+                tasks = load_config(args.config)
+                if tasks and tasks[0].get("local"):
+                    target_path = tasks[0]["local"]
+            except:
+                pass
+                
+        logger.info(f"正在扫描并清理备份文件: {os.path.abspath(target_path)}")
+        count = 0
+        total_size = 0
+        
+        for root, dirs, files in os.walk(target_path):
+            for file in files:
+                # Match pattern: *.bak.<digits>
+                if ".bak." in file:
+                    parts = file.rsplit(".bak.", 1)
+                    if len(parts) == 2 and parts[1].isdigit():
+                        file_path = os.path.join(root, file)
+                        try:
+                            s = os.path.getsize(file_path)
+                            os.remove(file_path)
+                            logger.info(f"  删除: {file}")
+                            count += 1
+                            total_size += s
+                        except Exception as e:
+                            logger.error(f"  删除失败 {file}: {e}")
+        
+        logger.success(f"清理完成。共删除 {count} 个文件，释放 {total_size/1024:.2f} KB。")
+        return
+
     # Check Auth and Login if needed
     user_token = FEISHU_USER_ACCESS_TOKEN
     
+    # Init Client (Temporary for validation)
+    client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
+    
+    # Validate and Auto-Refresh Token
+    if user_token:
+        # logger.debug("检查 Token 有效性...")
+        try:
+            from lark_oapi.api.authen.v1.model import GetUserInfoRequest
+            req = GetUserInfoRequest.builder().build()
+            # We need to construct request option manually or use client's internal helper if exposed
+            # FeishuClient._get_request_option is protected but accessible
+            opt = client._get_request_option()
+            
+            resp = client.client.authen.v1.user_info.get(req, opt)
+            if not resp.success():
+                # 99991677: Token Expired
+                # 20005: Invalid Access Token (e.g. revoked or malformed)
+                if resp.code == 99991677 or resp.code == 20005: 
+                    logger.warning(f"Token 失效 (Code: {resp.code})，尝试自动刷新...")
+                    from src.auth import FeishuAuthenticator
+                    auth = FeishuAuthenticator()
+                    new_token = auth.refresh()
+                    if new_token:
+                        user_token = new_token
+                        config.FEISHU_USER_ACCESS_TOKEN = new_token
+                        # Re-init Client with new token
+                        client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
+                        logger.success("Token 自动刷新成功")
+                    else:
+                        logger.error("自动刷新失败，需重新登录。")
+                        user_token = None
+                else:
+                    # Other errors (e.g. permission denied for user_info) shouldn't block main flow if token is valid?
+                    # But 99991677 is specific to expiry.
+                    # Let's print warning but continue, maybe sync permissions are fine.
+                    logger.warning(f"Token 校验警告: {resp.code} {resp.msg}")
+        except Exception as e:
+            # logger.warning(f"Token 校验跳过: {e}")
+            pass
+
     if not user_token and sys.stdin.isatty():
-        print("⚠️  未检测到 User Access Token (推荐用于解决权限问题)。")
+        logger.warning("未检测到 User Access Token (推荐用于解决权限问题)。")
         # Check if we should prompt
         # For simplicity, let's just hint user to use setup script or auto login here?
         # Let's try auto login integration.
@@ -96,7 +221,7 @@ def main():
                     # Update config module in memory is tricky if imported as from config import ...
                     # But we passed user_token to FeishuClient below, so it's fine for this run.
         except KeyboardInterrupt:
-            print("\n🚫 操作取消")
+            logger.info("\n操作取消")
             return
 
     # Init Client
@@ -117,23 +242,23 @@ def main():
             tasks = load_config(args.config)
             if tasks and tasks[0].get("cloud"):
                 target_folder = tasks[0]["cloud"]
-                print(f"⚙️  自动从配置中读取目标文件夹: {target_folder}")
+                logger.debug(f"自动从配置中读取目标文件夹: {target_folder}")
         except:
             pass
 
         try:
-            run_single_task(args.md_path, args.doc_token, args.force, note="CLI Task", target_folder=target_folder, vault_root=args.vault_root)
+            run_single_task(args.md_path, args.doc_token, args.force, note="CLI Task", target_folder=target_folder, vault_root=args.vault_root, debug=args.debug_dump, client=client)
         except Exception as e:
-            print(f"❌ 任务失败: {e}")
+            logger.error(f"任务失败: {e}")
             traceback.print_exc()
         return
 
     # Mode 2: Batch sync via Config file
-    print(f"⚙️  未提供参数，正在加载配置文件: {args.config}...")
+    logger.info(f"未提供参数，正在加载配置文件: {args.config}...", icon="⚙️ ")
     tasks = load_config(args.config)
     
     if not tasks:
-        print(f"⚠️  未在配置文件中找到任务或文件不存在。")
+        logger.warning(f"未在配置文件中找到任务或文件不存在。")
         print("用法: python3 main.py <local_path> <cloud_token> [--force]")
         print("   或: python3 main.py (使用 sync_config.json)")
         return
@@ -150,7 +275,7 @@ def main():
         note = task.get("note", "")
         
         if not local_path or not cloud_token:
-            print(f"⚠️  跳过无效任务: {task}")
+            logger.warning(f"跳过无效任务: {task}")
             continue
             
         total_count += 1
@@ -159,13 +284,13 @@ def main():
             # Config file tasks default to non-force unless specified in json
             force_sync = args.force or task.get("force", False)
             vault_root = task.get("vault_root") or args.vault_root
-            run_single_task(local_path, cloud_token, force_sync, note, vault_root=vault_root)
+            run_single_task(local_path, cloud_token, force_sync, note, target_folder=task.get("target_folder"), vault_root=vault_root, debug=args.debug_dump, client=client)
             success_count += 1
         except Exception as e:
-            print(f"❌ 任务失败: {e}")
+            logger.error(f"任务失败: {e}")
             traceback.print_exc()
             
-    print(f"\n🏁 批量同步完成。成功: {success_count}/{total_count}")
+    logger.header(f"批量同步完成。成功: {success_count}/{total_count}", icon="🏁")
 
 if __name__ == "__main__":
     main()

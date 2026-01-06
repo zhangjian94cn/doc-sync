@@ -1,46 +1,54 @@
 # DocSync: Obsidian to Feishu/Lark
 
-将你的 Obsidian 知识库无缝同步到飞书云文档 (Feishu/Lark Docx)。
-支持 Markdown 语法、图片上传、增量更新、目录同步、以及 Obsidian 特有的 Wiki Link。
+**将你的 Obsidian 知识库无缝同步到飞书云文档 (Feishu/Lark Docx)。**
+
+DocSync 是一个高效的同步工具，支持 Markdown 语法的完美还原、本地图片自动上传、目录结构递归同步以及智能增量更新。让你的知识库在云端触手可及。
+
+---
 
 ## ✨ 核心特性
 
-- **Markdown 完美还原**：支持标题、列表、代码块、引用、任务列表等。
-- **智能图片处理**：
-  - 自动识别并上传本地图片。
-  - 支持 **Obsidian Wiki Link** (`![[image.png]]`)。
-  - **全库资源索引**：无论图片在哪个子文件夹，都能自动找到并上传。
-- **用户身份同步**：使用 User Access Token，文档直接归属于你，而非应用机器人。
-- **增量更新**：基于 Block 指纹比对，只更新变更部分，速度飞快。
-- **目录同步**：递归同步整个文件夹结构。
+*   **Markdown 完美还原**：支持标题、列表（含嵌套）、代码块、引用、任务列表、粗体/斜体/删除线等。
+*   **智能图片处理**：
+    *   自动识别并上传本地图片。
+    *   支持 **Obsidian Wiki Link** (`![[image.png]]`)。
+    *   **全库资源索引**：无论图片在哪个子文件夹，都能自动找到并上传。
+*   **用户身份同步**：使用 User Access Token，文档直接归属于你，而非应用机器人。
+*   **增量更新**：基于 Block 指纹比对 (Tree Hash)，只更新变更部分，速度飞快且稳定。
+*   **目录同步**：递归同步整个文件夹结构，保持本地与云端结构一致。
+*   **自动 Token 刷新**：内置 Token 自动刷新机制，无需频繁手动登录。
 
 ## 🛠️ 安装与配置
 
 ### 1. 准备飞书应用
 
-1. 登录 [飞书开放平台](https://open.feishu.cn/app)。
-2. 创建一个“企业自建应用”。
-3. **权限管理**：开启以下权限：
-   - `云文档` -> `docx:document` (包含 create/read/write)
-   - `云空间` -> `drive:drive`, `drive:file:create`, `drive:file:read`
-4. **安全设置**：添加重定向 URL: `http://127.0.0.1:8000/callback` (用于自动登录)。
-5. **发布版本**：务必点击“创建版本”并发布。
+1.  登录 [飞书开放平台](https://open.feishu.cn/app)。
+2.  创建一个“企业自建应用”。
+3.  **权限管理**：开启以下权限：
+    *   `云文档` -> `docx:document` (包含 create/read/write)
+    *   `云空间` -> `drive:drive`, `drive:file:create`, `drive:file:read`
+4.  **安全设置**：添加重定向 URL: `http://127.0.0.1:8000/callback` (用于自动登录)。
+5.  **发布版本**：务必点击“创建版本”并发布，否则权限不生效。
 
 ### 2. 本地环境
 
 ```bash
+# 克隆仓库
+git clone https://github.com/your-repo/doc-sync.git
+cd doc-sync
+
 # 安装依赖
 pip install -r requirements.txt
 ```
 
 ### 3. 配置凭证
 
-复制 `.env.example` 到 `.env`，填入 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`。
+复制 `.env.example` 到 `.env`，填入你的 App ID 和 Secret。
 
 ```ini
 FEISHU_APP_ID=cli_xxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
-# FEISHU_USER_ACCESS_TOKEN 留空，首次运行会自动获取
+# FEISHU_USER_ACCESS_TOKEN 留空，首次运行会自动获取并保存
 ```
 
 ## 🚀 使用方法
@@ -51,25 +59,31 @@ FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
 
 ### 配置文件模式 (推荐)
 
-编辑 `sync_config.json`：
+编辑 `sync_config.json` 来管理你的同步任务：
 
 ```json
 [
   {
     "local": "/Users/xxx/obsidian/Vault/Folder",
     "cloud": "folder_token_from_url",
-    "note": "我的笔记",
+    "note": "我的笔记目录",
     "enabled": true,
     "force": false,
     "vault_root": "/Users/xxx/obsidian/Vault" 
+  },
+  {
+    "local": "/Users/xxx/obsidian/Vault/SingleFile.md",
+    "cloud": "docx_token_from_url",
+    "note": "单个重要文档",
+    "enabled": true
   }
 ]
 ```
 
-- `cloud`: 飞书文件夹 Token (URL 中 `folder/` 后面那串)。
-- `vault_root`: Obsidian 仓库根目录 (用于解析绝对路径图片引用)。如果不填，程序会自动向上查找 `.obsidian` 文件夹来确定根目录。
+*   `cloud`: 飞书文件夹 Token 或文档 Token (URL 中 `folder/` 或 `docx/` 后面那串)。
+*   `vault_root`: Obsidian 仓库根目录 (用于解析绝对路径图片引用)。如果不填，程序会自动向上查找 `.obsidian` 文件夹来确定根目录。
 
-运行：
+运行同步：
 ```bash
 python3 main.py
 ```
@@ -77,11 +91,18 @@ python3 main.py
 ### 命令行模式
 
 ```bash
-# 同步单个文件
-python3 main.py /path/to/note.md <folder_token>
+# 同步单个文件 (会自动检测目标是文件夹还是文档)
+python3 main.py /path/to/note.md <target_token>
 
 # 强制覆盖云端 (忽略时间戳检查)
-python3 main.py /path/to/note.md <folder_token> --force
+python3 main.py /path/to/note.md <target_token> --force
+```
+
+### 其他实用命令
+
+```bash
+# 清理产生的备份文件 (*.bak.*)
+python3 main.py --clean
 ```
 
 ## ❓ 常见问题
@@ -96,4 +117,7 @@ A: 你没有目标文件夹的权限。如果使用了 User Token，请确保同
 A: 确保 `vault_root` 配置正确（或能自动检测到）。程序会自动扫描 `vault_root` 下的所有图片建立索引。
 
 **Q: 列表嵌套没对齐？**
-A: 飞书 API 限制，目前通过全角空格模拟视觉缩进。建议使用 4 空格或 Tab 进行标准缩进。
+A: 我们已经优化了列表转换逻辑，支持多级缩进。如果仍有问题，请确保 Markdown 源码中使用标准的 Tab 或 4 空格缩进。
+
+---
+DocSync is an open-source project. Contributions are welcome!
