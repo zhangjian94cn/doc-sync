@@ -11,7 +11,7 @@ from enum import IntEnum
 from urllib.parse import unquote
 import difflib
 
-import config
+from src import config
 from src.feishu_client import FeishuClient
 from src.converter import MarkdownToFeishu, FeishuToMarkdown
 from src.utils import pad_center, parse_cloud_time

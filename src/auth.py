@@ -6,7 +6,7 @@ import requests
 import json
 import os
 import threading
-from config import FEISHU_APP_ID, FEISHU_APP_SECRET
+from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET
 
 PORT = 8000
 REDIRECT_URI = f"http://127.0.0.1:{PORT}/callback"

@@ -13,8 +13,7 @@ from src.sync import SyncManager, FolderSyncManager
 from src.converter import MarkdownToFeishu
 from src.feishu_client import FeishuClient
 from src.logger import logger
-from config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
-import sys
+from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
 
 def load_config(config_path):
     if not os.path.exists(config_path):

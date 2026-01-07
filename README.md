@@ -77,7 +77,7 @@ pip install -r requirements.txt
 ### 3️⃣ 运行配置向导
 
 ```bash
-python3 setup_wizard.py
+python3 scripts/setup_wizard.py
 ```
 
 向导会引导您：
@@ -166,7 +166,7 @@ python3 main.py
 ### 健康检查
 
 ```bash
-python3 health_check.py
+python3 scripts/health_check.py
 ```
 
 检查项目：

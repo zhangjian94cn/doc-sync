@@ -37,7 +37,7 @@
 4. **测试**
    ```bash
    # 运行健康检查
-   python3 health_check.py
+   python3 scripts/health_check.py
 
    # 测试您的更改
    python3 main.py --force
@@ -106,7 +106,7 @@ pip install -r requirements.txt
 export DOCSYNC_LOG_LEVEL=DEBUG
 
 # 运行测试
-python3 health_check.py
+python3 scripts/health_check.py
 ```
 
 ## 需要帮助的领域
