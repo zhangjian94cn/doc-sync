@@ -1,105 +1,122 @@
-# Obsidian Feishu Sync (飞书文档同步工具)
+# DocSync: Obsidian to Feishu/Lark
 
-一个强大的双向同步工具，连接你的 **Obsidian (本地 Markdown)** 和 **飞书云文档**。
+**将你的 Obsidian 知识库无缝同步到飞书云文档 (Feishu/Lark Docx)。**
+
+DocSync 是一个高效的同步工具，支持 Markdown 语法的完美还原、本地图片自动上传、目录结构递归同步以及智能增量更新。让你的知识库在云端触手可及。
 
 [English Documentation](README.md)
 
+---
+
 ## ✨ 核心特性
 
-- **🔄 双向智能同步**：自动检测更新，支持 本地 -> 云端 和 云端 -> 本地 的双向同步。
-- **🖼️ 图片自动上传**：自动识别 Markdown 中的本地图片，上传至飞书云空间并插入文档。
-- **📂 文件夹递归同步**：完美保持文件夹层级结构，一键同步整个知识库。
-- **🛡️ 安全备份与还原**：
-    - 每次覆盖本地文件前自动创建带有**批次ID**的备份。
-    - 提供交互式还原工具，支持一键回滚到任意历史版本。
-- **📝 完美富文本支持**：
-    - 标题 (H1-H9)、列表 (无序/有序/任务)
-    - 代码块、行内代码
-    - 粗体、斜体、删除线、链接
+*   **Markdown 完美还原**：支持标题、列表（含嵌套）、代码块、引用、任务列表、粗体/斜体/删除线等。
+*   **智能图片处理**：
+    *   自动识别并上传本地图片。
+    *   支持 **Obsidian Wiki Link** (`![[image.png]]`)。
+    *   **全库资源索引**：无论图片在哪个子文件夹，都能自动找到并上传。
+*   **用户身份同步**：使用 User Access Token，文档直接归属于你，而非应用机器人。
+*   **增量更新**：基于 Block 指纹比对 (Tree Hash)，只更新变更部分，速度飞快且稳定。
+*   **目录同步**：递归同步整个文件夹结构，保持本地与云端结构一致。
+*   **自动 Token 刷新**：内置 Token 自动刷新机制，无需频繁手动登录。
 
-## 📦 桌面客户端 (GUI)
+## 🛠️ 安装与配置
 
-我们现在提供了简单美观的桌面应用，支持 macOS, Windows 和 Linux！
+### 1. 准备飞书应用
 
-### 安装与运行
+1.  登录 [飞书开放平台](https://open.feishu.cn/app)。
+2.  创建一个“企业自建应用”。
+3.  **权限管理**：开启以下权限：
+    *   `云文档` -> `docx:document` (包含 create/read/write)
+    *   `云空间` -> `drive:drive`, `drive:file:create`, `drive:file:read`
+4.  **安全设置**：添加重定向 URL: `http://127.0.0.1:8000/callback` (用于自动登录)。
+5.  **发布版本**：务必点击“创建版本”并发布，否则权限不生效。
 
-1.  **安装依赖**:
-    ```bash
-    cd electron-app && npm install
-    ```
-2.  **启动应用**:
-    ```bash
-    ./start_gui.sh
-    ```
-
-## 🚀 命令行快速开始
-
-### 1. 安装
+### 2. 本地环境
 
 ```bash
+# 克隆仓库
 git clone https://github.com/your-repo/doc-sync.git
 cd doc-sync
+
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-### 2. 配置凭证
+### 3. 配置
 
-复制 `.env.example` 为 `.env` 并填入你的飞书应用凭证：
-
-```bash
-FEISHU_APP_ID=cli_xxxxxxxx
-FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
-```
-
-### 3. 使用指南
-
-#### 📂 文件夹同步 (推荐)
-将本地 Obsidian 仓库完整同步到飞书云端文件夹。
-
-```bash
-python3 main.py /本地/文件夹/路径 <云端文件夹Token>
-```
-
-#### 📄 单文件同步
-仅同步单个 Markdown 文件。
-
-```bash
-python3 main.py /本地/文件.md <文档Token> [--force]
-```
-
-#### ↩️ 备份还原 (New!)
-如果不小心覆盖了本地文件，可以使用还原模式查看历史版本并回滚。
-
-```bash
-python3 main.py --restore /本地/文件夹/路径
-```
-*系统会列出所有备份批次，选择序号即可一键还原该批次下的所有文件。*
-
-#### ⚙️ 批量同步 (配置文件)
-通过 `sync_config.json` 管理多个同步任务，直接运行 `python3 main.py` 即可。
+编辑 `sync_config.json`，填入你的 App ID、Secret 以及同步任务。
 
 ```json
-[
-  {
-    "note": "我的知识库",
-    "local": "/Users/me/obsidian/Vault",
-    "cloud": "fldcnYourFolderToken",
-    "enabled": true
-  }
-]
+{
+  "feishu_app_id": "cli_xxxxxxxx",
+  "feishu_app_secret": "xxxxxxxxxxxxxxxx",
+  "feishu_assets_token": "", 
+  "tasks": [
+    {
+      "note": "我的笔记",
+      "local": "/Users/xxx/obsidian/Vault/Folder",
+      "cloud": "folder_token_from_url",
+      "vault_root": "/Users/xxx/obsidian/Vault",
+      "enabled": true,
+      "force": false
+    }
+  ]
+}
 ```
 
-## 🛠️ 常用命令速查
+*   **全局配置 (Global Config)**:
+    *   `feishu_app_id`, `feishu_app_secret`: 飞书应用凭证。
+    *   `feishu_assets_token`: (可选) 指定用于存放上传图片/附件的飞书文件夹 Token。如果不填，程序会自动在根目录查找或创建名为 `DocSync_Assets` 的文件夹。
+*   **任务配置 (Tasks)**:
+    *   `local`: 本地 Markdown 文件或文件夹的绝对路径。
+    *   `cloud`: 飞书文件夹 Token (用于同步文件夹) 或 文档 Token (用于同步单文件)。
+    *   `vault_root`: Obsidian 仓库根目录 (用于解析绝对路径图片引用)。
 
-| 功能 | 命令 | 说明 |
-| :--- | :--- | :--- |
-| **同步** | `python3 main.py [path] [token]` | 基础同步命令 |
-| **强制上传** | `... --force` | 忽略时间戳，强制覆盖云端 |
-| **还原备份** | `python3 main.py --restore [path]` | 交互式还原历史版本 |
-| **清理备份** | `python3 main.py --clean` | 删除所有 .bak 备份文件 |
-| **指定根目录** | `... --vault-root [path]` | 解决绝对路径资源引用问题 |
-| **查看帮助** | `python3 main.py -h` | 显示完整帮助信息 |
+## 🚀 使用方法
 
-## 📄 开源协议
+### 首次运行（授权）
 
-MIT
+运行任意同步命令，如果未检测到 Token，程序会自动引导你在浏览器中登录授权。授权成功后 Token 会自动保存到 `sync_config.json` 文件中。
+
+### 运行同步
+
+```bash
+python3 main.py
+```
+
+这会读取 `sync_config.json` 中的 `tasks` 列表并依次执行。
+
+### 命令行模式 (临时任务)
+
+```bash
+# 同步单个文件 (会自动检测目标是文件夹还是文档)
+python3 main.py /path/to/note.md <target_token>
+
+# 强制覆盖云端 (忽略时间戳检查)
+python3 main.py /path/to/note.md <target_token> --force
+```
+
+### 其他实用命令
+
+```bash
+# 清理产生的备份文件 (*.bak.*)
+python3 main.py --clean
+```
+
+## ❓ 常见问题
+
+**Q: 报错 90003088 (Tenant has not purchased...)**
+A: 通常是因为应用权限不足。请确保在飞书后台开通了 `docx:document` 等权限，并且**发布了版本**。然后重新运行程序重新授权。
+
+**Q: 报错 1061004 (Forbidden)**
+A: 你没有目标文件夹的权限。如果使用了 User Token，请确保同步的目标文件夹是你自己创建的（或者你有编辑权限）。你可以将配置中的 `cloud` 设为 `root` 同步到根目录，或者新建一个文件夹。
+
+**Q: 图片显示不出来？**
+A: 确保 `vault_root` 配置正确（或能自动检测到）。程序会自动扫描 `vault_root` 下的所有图片建立索引。
+
+**Q: 列表嵌套没对齐？**
+A: 我们已经优化了列表转换逻辑，支持多级缩进。如果仍有问题，请确保 Markdown 源码中使用标准的 Tab 或 4 空格缩进。
+
+---
+DocSync is an open-source project. Contributions are welcome!
