@@ -1,0 +1,64 @@
+{
+  "_readme": "配置文件模板 - 复制此文件为 sync_config.json 并填写您的信息",
+  "_version": "1.0.0",
+
+  "feishu_app_id_desc": "飞书开放平台应用的 App ID (以 cli_ 开头)",
+  "feishu_app_id": "cli_xxxxxxxxxx",
+
+  "feishu_app_secret_desc": "飞书开放平台应用的 App Secret",
+  "feishu_app_secret": "your_app_secret_here",
+
+  "feishu_user_access_token_desc": "[自动管理] 用户的 Access Token，用于访问文档和云空间 (程序自动刷新，请勿手动修改)",
+  "feishu_user_access_token": "",
+
+  "feishu_user_refresh_token_desc": "[自动管理] 用于刷新 Access Token 的 Refresh Token (程序自动刷新，请勿手动修改)",
+  "feishu_user_refresh_token": "",
+
+  "feishu_assets_token_desc": "指定存放图片/附件的飞书文件夹 Token。若留空，程序会自动在根目录创建 'DocSync_Assets' 文件夹",
+  "feishu_assets_token": "",
+
+  "tasks_desc": "同步任务列表配置 - 可以配置多个任务",
+  "tasks": [
+    {
+      "note_desc": "任务说明",
+      "note": "示例任务 - 工作笔记",
+
+      "local_desc": "本地文件或文件夹的绝对路径",
+      "local": "/path/to/your/obsidian/vault/folder",
+
+      "cloud_desc": "飞书目标位置的 Token (从飞书文件夹或文档的 URL 中获取)",
+      "cloud": "folder_or_doc_token",
+
+      "vault_root_desc": "Obsidian 仓库根目录，用于解析图片引用",
+      "vault_root": "/path/to/your/obsidian/vault",
+
+      "enabled_desc": "是否启用此任务 (true/false)",
+      "enabled": true,
+
+      "force_desc": "是否强制覆盖云端 (true: 忽略时间戳; false: 仅当本地更新时上传)",
+      "force": false
+    }
+  ],
+
+  "_help": {
+    "how_to_get_tokens": {
+      "app_credentials": "访问 https://open.feishu.cn/app 查看您的应用详情",
+      "folder_token": "打开飞书文件夹，从 URL 中复制，例如：https://feishu.cn/drive/folder/[这里是token]",
+      "doc_token": "打开飞书文档，从 URL 中复制，例如：https://feishu.cn/docx/[这里是token]"
+    },
+    "required_permissions": [
+      "Cloud Docs -> docx:document (文档的创建、读取、编辑权限)",
+      "Cloud Drive -> drive:drive (云空间的基础权限)",
+      "Cloud Drive -> drive:file:create (文件创建权限)",
+      "Cloud Drive -> drive:file:read (文件读取权限)"
+    ],
+    "first_time_setup": [
+      "1. 在飞书开放平台创建应用并配置权限",
+      "2. 复制此模板为 sync_config.json",
+      "3. 填写 app_id 和 app_secret",
+      "4. 配置至少一个同步任务",
+      "5. 运行 python3 main.py",
+      "6. 首次运行会自动打开浏览器进行授权"
+    ]
+  }
+}

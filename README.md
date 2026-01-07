@@ -1,63 +1,122 @@
-# DocSync: Obsidian to Feishu/Lark
+# 📚 DocSync - Obsidian to Feishu/Lark
 
-**Seamlessly synchronize your Obsidian knowledge base to Feishu/Lark Cloud Documents (Docx).**
+<div align="center">
 
-DocSync is a powerful synchronization tool that supports perfect Markdown rendering, automatic local image uploading, recursive directory synchronization, and intelligent incremental updates. Keep your knowledge base accessible in the cloud.
+**将您的 Obsidian 知识库无缝同步到飞书云文档**
 
-[中文文档](README_CN.md)
+[![Python Version](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[English](README.md) | [中文文档](README_CN.md)
+
+</div>
 
 ---
 
-## ✨ Core Features
+## ✨ 核心特性
 
-*   **Perfect Markdown Rendering**: Supports headings, lists (nested), code blocks, blockquotes, task lists, bold/italic/strikethrough, etc.
-*   **Smart Image Handling**:
-    *   Automatically identifies and uploads local images.
-    *   Supports **Obsidian Wiki Link** (`![[image.png]]`).
-    *   **Vault-wide Indexing**: Automatically finds and uploads images regardless of their location in subfolders.
-*   **User Identity Sync**: Uses User Access Token, so documents belong directly to you, not a bot.
-*   **Incremental Update**: Based on Block Tree Hash, only updates changed parts, making it fast and stable.
-*   **Directory Sync**: Recursively synchronizes the entire folder structure, maintaining consistency between local and cloud.
-*   **Auto Token Refresh**: Built-in automatic token refreshing mechanism, no need for frequent manual logins.
+### 🎯 完美的 Markdown 支持
+- ✅ **标题** (H1-H9)
+- ✅ **列表** (有序、无序、任务列表、多级嵌套)
+- ✅ **代码块** (支持语法高亮)
+- ✅ **引用块**
+- ✅ **文本样式** (粗体、斜体、删除线、行内代码)
+- ✅ **链接和图片**
 
-## 🛠️ Installation & Configuration
+### 🖼️ 智能资源处理
+- 📤 **自动上传** - 识别并上传本地图片和附件
+- 🔗 **Obsidian 支持** - 完美支持 Wiki 链接 `![[image.png]]`
+- 📁 **递归索引** - 自动查找仓库中任意位置的资源文件
+- 📎 **文件支持** - 支持图片、视频、PDF、Office 文档等多种格式
 
-### 1. Prepare Feishu App
+### ⚡ 高效同步
+- 🔄 **增量更新** - 基于 Block Tree Hash，只更新变更部分
+- 📂 **目录同步** - 递归同步整个文件夹结构
+- 🎭 **用户身份** - 使用 User Access Token，文档归属于你而非机器人
+- 🔐 **自动续期** - 内置 Token 自动刷新，无需频繁登录
 
-1.  Log in to [Feishu Open Platform](https://open.feishu.cn/app).
-2.  Create a "Custom App" (Enterprise Self-built App).
-3.  **Permissions**: Enable the following permissions:
-    *   `Cloud Docs` -> `docx:document` (includes create/read/write)
-    *   `Cloud Drive` -> `drive:drive`, `drive:file:create`, `drive:file:read`
-4.  **Security Settings**: Add Redirect URL: `http://127.0.0.1:8000/callback` (for auto-login).
-5.  **Publish Version**: You MUST click "Create Version" and publish it for permissions to take effect.
+### 🛠️ 易用性
+- 🎨 **配置向导** - 交互式配置向导，快速上手
+- 🩺 **健康检查** - 一键检查环境和配置状态
+- 📊 **详细日志** - 彩色日志输出，清晰显示同步过程
+- 🎚️ **日志级别** - 支持 DEBUG/INFO/WARNING/ERROR 级别控制
 
-### 2. Local Environment
+---
+
+## 🚀 快速开始
+
+### 1️⃣ 安装
 
 ```bash
-# Clone repository
-git clone https://github.com/your-repo/doc-sync.git
+# 克隆仓库
+git clone https://github.com/zhangjian94cn/doc-sync.git
 cd doc-sync
 
-# Install dependencies
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-### 3. Configuration
+### 2️⃣ 配置飞书应用
 
-Edit `sync_config.json` to configure your App ID, Secret, and sync tasks.
+<details>
+<summary><b>点击展开详细步骤</b></summary>
+
+1. 访问 [飞书开放平台](https://open.feishu.cn/app)
+2. 点击 **创建企业自建应用**
+3. 配置应用权限：
+   - `云文档` -> `docx:document` (文档的创建、读取、编辑)
+   - `云空间` -> `drive:drive` (云空间基础权限)
+   - `云空间` -> `drive:file:create` (文件创建)
+   - `云空间` -> `drive:file:read` (文件读取)
+4. 设置回调地址：`http://127.0.0.1:8000/callback`
+5. **重要**：点击 **创建版本** 并发布，权限才会生效
+
+</details>
+
+### 3️⃣ 运行配置向导
+
+```bash
+python3 setup_wizard.py
+```
+
+向导会引导您：
+- 输入飞书应用凭证
+- 配置同步任务
+- 设置资源存储位置
+
+### 4️⃣ 开始同步
+
+```bash
+# 运行配置的所有同步任务
+python3 main.py
+
+# 强制覆盖云端（忽略时间戳检查）
+python3 main.py --force
+
+# 同步单个文件（临时任务）
+python3 main.py /path/to/note.md <folder_or_doc_token>
+```
+
+---
+
+## 📖 详细文档
+
+### 配置文件说明
+
+配置文件 `sync_config.json` 包含以下部分：
 
 ```json
 {
-  "feishu_app_id": "cli_xxxxxxxx",
-  "feishu_app_secret": "xxxxxxxxxxxxxxxx",
-  "feishu_assets_token": "", 
+  "feishu_app_id": "cli_xxxxxxxxxx",
+  "feishu_app_secret": "your_app_secret",
+  "feishu_assets_token": "",
   "tasks": [
     {
-      "note": "My Notes",
-      "local": "/Users/xxx/obsidian/Vault/Folder",
-      "cloud": "folder_token_from_url",
-      "vault_root": "/Users/xxx/obsidian/Vault",
+      "note": "工作笔记",
+      "local": "/Users/xxx/Obsidian/Work",
+      "cloud": "folder_token_from_feishu_url",
+      "vault_root": "/Users/xxx/Obsidian",
       "enabled": true,
       "force": false
     }
@@ -65,58 +124,168 @@ Edit `sync_config.json` to configure your App ID, Secret, and sync tasks.
 }
 ```
 
-*   **Global Config**:
-    *   `feishu_app_id`, `feishu_app_secret`: Feishu App credentials.
-    *   `feishu_assets_token`: (Optional) Token of the Feishu folder to store uploaded images/attachments. If left empty, the program will automatically find or create a `DocSync_Assets` folder in the root directory.
-*   **Tasks**:
-    *   `local`: Absolute path to the local Markdown file or folder.
-    *   `cloud`: Feishu Folder Token (for folder sync) or Document Token (for single file sync).
-    *   `vault_root`: Obsidian Vault root directory (used to resolve absolute image paths).
+#### 全局配置
+- `feishu_app_id`: 飞书应用 ID (以 `cli_` 开头)
+- `feishu_app_secret`: 飞书应用密钥
+- `feishu_assets_token`: (可选) 资源存储文件夹 Token
 
-## 🚀 Usage
+#### 任务配置
+- `note`: 任务描述
+- `local`: 本地文件或文件夹路径
+- `cloud`: 飞书文件夹或文档 Token
+- `vault_root`: Obsidian 仓库根目录
+- `enabled`: 是否启用该任务
+- `force`: 是否强制覆盖云端
 
-### First Run (Authorization)
+### 如何获取 Token
 
-Run any sync command. If no Token is detected, the program will automatically guide you to log in via browser. After successful authorization, the Token will be automatically saved to `sync_config.json`.
+#### 文件夹 Token
+1. 在飞书中打开目标文件夹
+2. 从 URL 复制 Token：`https://feishu.cn/drive/folder/[THIS_IS_TOKEN]`
 
-### Run Sync
+#### 文档 Token
+1. 在飞书中打开目标文档
+2. 从 URL 复制 Token：`https://feishu.cn/docx/[THIS_IS_TOKEN]`
+
+---
+
+## 🛠️ 高级功能
+
+### 日志级别控制
 
 ```bash
+# 设置日志级别为 DEBUG（显示所有日志）
+export DOCSYNC_LOG_LEVEL=DEBUG
+python3 main.py
+
+# 设置日志级别为 ERROR（只显示错误）
+export DOCSYNC_LOG_LEVEL=ERROR
 python3 main.py
 ```
 
-This will read the `tasks` list from `sync_config.json` and execute them sequentially.
-
-### Command Line Mode (Ad-hoc Task)
+### 健康检查
 
 ```bash
-# Sync a single file (Automatically detects if target is a folder or doc)
-python3 main.py /path/to/note.md <target_token>
-
-# Force overwrite cloud (Ignore timestamp check)
-python3 main.py /path/to/note.md <target_token> --force
+python3 health_check.py
 ```
 
-### Other Commands
+检查项目：
+- ✅ Python 版本
+- ✅ 依赖包安装
+- ✅ 配置文件完整性
+- ✅ 飞书 API 连接
+
+### 清理备份文件
 
 ```bash
-# Clean up backup files (*.bak.*)
 python3 main.py --clean
 ```
 
-## ❓ FAQ
+---
 
-**Q: Error 90003088 (Tenant has not purchased...)**
-A: Usually due to insufficient app permissions. Please ensure you have enabled `docx:document` permissions in the Feishu Console and **published a version**. Then re-run the program to re-authorize.
+## 💡 使用技巧
 
-**Q: Error 1061004 (Forbidden)**
-A: You do not have permission for the target folder. If using User Token, ensure the target folder was created by you (or you have edit rights). You can set `cloud` to `root` in the config to sync to the root directory, or create a new folder.
+### 1. 首次授权
+首次运行时，程序会自动打开浏览器引导您授权。授权后 Token 会自动保存，无需每次登录。
 
-**Q: Images not showing up?**
-A: Ensure `vault_root` is configured correctly (or can be auto-detected). The program scans all images under `vault_root` to build an index.
+### 2. 多任务配置
+您可以在 `sync_config.json` 中配置多个同步任务，程序会按顺序执行。
 
-**Q: Nested lists not aligned?**
-A: We have optimized the list conversion logic to support multi-level indentation. If issues persist, ensure your Markdown source uses standard Tab or 4-space indentation.
+### 3. 选择性同步
+使用 `enabled: false` 可以临时禁用某个任务，而不需要删除配置。
+
+### 4. 强制同步
+使用 `--force` 参数可以忽略时间戳检查，强制覆盖云端内容。
 
 ---
-DocSync is an open-source project. Contributions are welcome!
+
+## ❓ 常见问题
+
+<details>
+<summary><b>Q: 提示 "90003088 Tenant has not purchased" 错误</b></summary>
+
+**A:** 权限配置不足。请确保：
+1. 在飞书控制台启用了所需权限
+2. **点击了"创建版本"并发布**
+3. 重新运行程序进行授权
+
+</details>
+
+<details>
+<summary><b>Q: 提示 "1061004 Forbidden" 错误</b></summary>
+
+**A:** 没有目标文件夹的权限。请确保：
+1. 目标文件夹是您创建的（或您有编辑权限）
+2. 或者使用 `"cloud": "root"` 同步到根目录
+3. 或者在飞书中新建一个文件夹
+
+</details>
+
+<details>
+<summary><b>Q: 图片无法显示</b></summary>
+
+**A:** 请检查：
+1. `vault_root` 配置是否正确
+2. 图片文件是否存在
+3. 图片路径引用是否正确
+
+程序会递归扫描 `vault_root` 下的所有图片建立索引。
+
+</details>
+
+<details>
+<summary><b>Q: 列表嵌套层级不对</b></summary>
+
+**A:** 确保 Markdown 源文件使用标准的 Tab 或 4 空格缩进。
+
+</details>
+
+<details>
+<summary><b>Q: 如何同步到指定文档而不是文件夹</b></summary>
+
+**A:** 将 `cloud` 字段设置为文档的 Token（而不是文件夹 Token）。
+
+</details>
+
+---
+
+## 🤝 贡献
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 本仓库
+2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+---
+
+## 🙏 致谢
+
+- [Lark Open Platform](https://open.feishu.cn/) - 飞书开放平台
+- [markdown-it-py](https://github.com/executablebooks/markdown-it-py) - Markdown 解析器
+- 所有贡献者和使用者
+
+---
+
+## 📞 联系方式
+
+- **Issues**: [GitHub Issues](https://github.com/zhangjian94cn/doc-sync/issues)
+- **Pull Requests**: [GitHub PRs](https://github.com/zhangjian94cn/doc-sync/pulls)
+
+---
+
+<div align="center">
+
+**⭐ 如果这个项目对您有帮助，请给一个 Star！**
+
+Made with ❤️ by [zhangjian94cn](https://github.com/zhangjian94cn)
+
+</div>
