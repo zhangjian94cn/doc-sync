@@ -23,11 +23,12 @@ class SyncResult(IntEnum):
     ERROR = 2
 
 class SyncManager:
-    def __init__(self, md_path: str, doc_token: str, force: bool = False, vault_root: str = None, client: FeishuClient = None):
+    def __init__(self, md_path: str, doc_token: str, force: bool = False, vault_root: str = None, client: FeishuClient = None, batch_id: str = None):
         self.md_path = os.path.abspath(md_path)
         self.doc_token = doc_token
         self.force = force
         self.vault_root = vault_root or os.path.dirname(self.md_path)
+        self.batch_id = batch_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         
         if client:
             self.client = client
@@ -198,7 +199,7 @@ class SyncManager:
             converter = FeishuToMarkdown(image_downloader=lambda t: self.client.download_image(t, os.path.join(os.path.dirname(self.md_path), "assets", f"{t}.png")))
             md_content = converter.convert(blocks)
             if os.path.exists(self.md_path):
-                bak_path = f"{self.md_path}.bak.{int(time.time())}"
+                bak_path = f"{self.md_path}.bak.{self.batch_id}"
                 shutil.copy(self.md_path, bak_path)
             with open(self.md_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
@@ -239,6 +240,7 @@ class FolderSyncManager:
         self.force = force
         self.vault_root = vault_root or local_root
         self.debug = debug
+        self.batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         if client:
             self.client = client
         else:
@@ -267,13 +269,13 @@ class FolderSyncManager:
             elif item.endswith(".md"):
                 doc_name = item[:-3]
                 if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
-                    sync = SyncManager(item_path, cloud_map[doc_name].token, self.force, vault_root=self.vault_root, client=self.client)
+                    sync = SyncManager(item_path, cloud_map[doc_name].token, self.force, vault_root=self.vault_root, client=self.client, batch_id=self.batch_id)
                     sync.run(debug=self.debug)
                     self.stats["updated"] += 1
                 else:
                     new_token = self.client.create_docx(cloud_token, doc_name)
                     if new_token:
-                        sync = SyncManager(item_path, new_token, force=True, vault_root=self.vault_root, client=self.client)
+                        sync = SyncManager(item_path, new_token, force=True, vault_root=self.vault_root, client=self.client, batch_id=self.batch_id)
                         sync.run(debug=self.debug)
                         self.stats["created"] += 1
                     else: self.stats["failed"] += 1

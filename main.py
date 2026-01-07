@@ -116,17 +116,47 @@ def run_single_task(local_path, cloud_token, force, note="", target_folder=None,
         manager.run(debug=debug)
 
 def main():
-    parser = argparse.ArgumentParser(description="Sync Obsidian Markdown to Feishu Doc")
-    parser.add_argument("md_path", nargs='?', help="Path to the Obsidian Markdown file or folder")
-    parser.add_argument("doc_token", nargs='?', help="Feishu Document/Folder Token")
-    parser.add_argument("--force", action="store_true", help="Force upload even if cloud version is newer")
-    parser.add_argument("--config", default="sync_config.json", help="Path to sync config file (default: sync_config.json)")
-    parser.add_argument("--vault-root", help="Explicitly set the Obsidian Vault Root path (for resolving absolute resource links)")
-    parser.add_argument("--clean", action="store_true", help="Clean up backup files (*.bak.*) recursively")
-    parser.add_argument("--debug-dump", action="store_true", help="Verify cloud structure after sync (Debug)")
+    parser = argparse.ArgumentParser(
+        description="DocSync: 双向同步 Obsidian (Markdown) 与 飞书云文档",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="""
+示例:
+  1. 单文件/文件夹同步:
+     python3 main.py /path/to/note.md <doc_token>
+     python3 main.py /path/to/folder <folder_token>
+
+  2. 使用配置文件批量同步 (默认读取 sync_config.json):
+     python3 main.py
+
+  3. 还原备份:
+     python3 main.py --restore /path/to/folder_or_file
+
+  4. 清理旧备份:
+     python3 main.py --clean
+"""
+    )
+    parser.add_argument("md_path", nargs='?', help="本地 Markdown 文件或文件夹路径")
+    parser.add_argument("doc_token", nargs='?', help="飞书云文档或文件夹的 Token")
+    parser.add_argument("--force", action="store_true", help="强制上传（即使云端更新，也会覆盖云端）")
+    parser.add_argument("--config", default="sync_config.json", help="指定配置文件路径 (默认: sync_config.json)")
+    parser.add_argument("--vault-root", help="显式指定 Obsidian 仓库根目录 (用于解析绝对路径的资源引用)")
+    parser.add_argument("--clean", action="store_true", help="清理模式：递归删除所有备份文件 (*.bak.*)")
+    parser.add_argument("--restore", help="还原模式：交互式选择并还原备份版本")
+    parser.add_argument("--debug-dump", action="store_true", help="调试模式：同步后拉取并打印云端结构")
     
     args = parser.parse_args()
     
+    # Show help if no args provided and not using config implicitly
+    if len(sys.argv) == 1 and not os.path.exists(args.config):
+        parser.print_help()
+        return
+    
+    # Mode: Restore
+    if args.restore:
+        from src.restore import run_restore_interactive
+        run_restore_interactive(args.restore)
+        return
+
     # Mode: Clean Backups
     if args.clean:
         target_path = args.md_path or "."

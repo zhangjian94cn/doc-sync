@@ -120,6 +120,10 @@ class FeishuClient:
         return None
 
     def get_or_create_assets_folder(self) -> Optional[str]:
+        # Check env first
+        env_token = os.getenv("FEISHU_ASSETS_TOKEN")
+        if env_token: return env_token
+
         from lark_oapi.api.drive.v1.model import CreateFolderFileRequest, CreateFolderFileRequestBody, ListFileRequest
         root_token = ""
         try:
