@@ -20,7 +20,16 @@ def load_config(config_path):
     if not os.path.exists(config_path):
         return []
     with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        try:
+            data = json.load(f)
+            # Support both new dict format and old list format
+            if isinstance(data, dict):
+                return data.get("tasks", [])
+            elif isinstance(data, list):
+                return data
+        except:
+            return []
+    return []
 
 def find_vault_root(path: str) -> Optional[str]:
     """

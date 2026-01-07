@@ -164,33 +164,50 @@ class SyncManager:
 
     def _resource_uploader(self, path: str) -> Optional[str]:
         if not path or path.startswith("http"): return None
-        real_path = path
-        if not os.path.isabs(path):
-            candidates = [
-                os.path.join(os.path.dirname(self.md_path), path),
-                os.path.join(self.vault_root, path),
-                os.path.join(self.vault_root, "assets", path)
-            ]
-            for c in candidates:
-                if os.path.exists(c):
-                    real_path = c; break
         
+        # URL decode first (e.g., %E4%B8%AD%E6%96%87.png -> 中文.png)
+        decoded_path = unquote(path)
+        
+        real_path = decoded_path
+        
+        # List of potential base directories to search in
+        search_dirs = [
+            os.path.dirname(self.md_path),  # Current file directory
+            self.vault_root,                # Vault root
+            os.path.join(self.vault_root, "assets"), # Common assets folder
+            os.path.join(self.vault_root, "attachments"), # Obsidian attachments
+            os.path.join(self.vault_root, "resources"),
+            os.path.join(self.vault_root, "image"),
+            os.path.join(self.vault_root, "images")
+        ]
+
+        found = False
+        
+        # Strategy 1: Check exact path relative to search dirs
+        if not os.path.isabs(decoded_path):
+            for base_dir in search_dirs:
+                candidate = os.path.join(base_dir, decoded_path)
+                if os.path.exists(candidate):
+                    real_path = candidate
+                    found = True
+                    break
+        
+        # Strategy 2: Recursive search in Vault if not found
+        # This is expensive but necessary for "shortest path" links in Obsidian
+        if not found and not os.path.exists(real_path):
+            filename = os.path.basename(decoded_path)
+            for root, dirs, files in os.walk(self.vault_root):
+                if filename in files:
+                    real_path = os.path.join(root, filename)
+                    found = True
+                    break
+
         if not os.path.exists(real_path):
-            # Try unquote for URL encoded paths
-            real_path = unquote(real_path)
-            if not os.path.exists(real_path):
-                logger.error(f"本地资源未找到: {path}"); return None
-            
-        ext = real_path.lower().split('.')[-1]
-        is_image = ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']
-        
-        if is_image:
-            return self.client.upload_image(real_path, self.doc_token)
-        else:
-            root_assets = self.client.get_or_create_assets_folder()
-            parent_token = root_assets if root_assets else self.doc_token
-            parent_type = "explorer" if root_assets else "docx_file"
-            return self.client.upload_file(real_path, parent_token, parent_type=parent_type)
+            logger.error(f"本地资源未找到: {path} (尝试路径: {real_path})"); return None
+
+        # Return the local path instead of uploading immediately
+        # The upload will be handled by add_blocks method
+        return real_path
 
     def _sync_cloud_to_local(self) -> SyncResult:
         try:

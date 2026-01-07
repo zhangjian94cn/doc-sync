@@ -120,11 +120,15 @@ class FeishuClient:
         return None
 
     def get_or_create_assets_folder(self) -> Optional[str]:
-        # Check env first
-        env_token = os.getenv("FEISHU_ASSETS_TOKEN")
-        if env_token: return env_token
-
         from lark_oapi.api.drive.v1.model import CreateFolderFileRequest, CreateFolderFileRequestBody, ListFileRequest
+        
+        # Try to use configured assets token first
+        try:
+            from config import FEISHU_ASSETS_TOKEN
+            if FEISHU_ASSETS_TOKEN:
+                return FEISHU_ASSETS_TOKEN
+        except: pass
+
         root_token = ""
         try:
             url = "https://open.feishu.cn/open-apis/drive/explorer/v2/root_folder/meta"
@@ -240,7 +244,21 @@ class FeishuClient:
                 p_type = "explorer" if root_folder else "docx_file"
                 for idx, path in file_uploads:
                     token = self.upload_file(path, p_token, parent_type=p_type)
-                    if token: batch_payload[idx]["file"]["token"] = token
+                    if token:
+                        batch_payload[idx]["file"]["token"] = token
+                    else:
+                        # Upload failed, convert to error text block
+                        logger.error(f"文件上传失败，跳过: {os.path.basename(path)}")
+                        batch_payload[idx] = {
+                            "block_type": 2,
+                            "text": {
+                                "elements": [{
+                                    "text_run": {
+                                        "content": f"⚠️ 文件上传失败: {os.path.basename(path)}"
+                                    }
+                                }]
+                            }
+                        }
             
             created_ids = self._batch_create(document_id, parent_id, batch_payload, insert_index)
             if not created_ids: return
@@ -273,32 +291,66 @@ class FeishuClient:
         }
         
         created_ids = []
-        chunk_size = 50
+        chunk_size = 10  # Reduce chunk size to avoid format issues
         
         def clean_block(b):
             b_new = b.copy()
             b_type = b_new.get("block_type")
             b_new.pop("children", None)
             
-            # Handle File Block (Type 23) conversion to Text Link
+            # Handle File Block (Type 23)
+            # Feishu batch create API doesn't support file blocks directly
+            # Convert file blocks to text blocks with file links
             if b_type == 23:
-                f_data = b_new.get("file", {})
-                t = f_data.get("token")
-                n = f_data.get("name", "File")
-                file_url = f"https://www.feishu.cn/file/{t}"
-                b_new = {
-                    "block_type": 2,
-                    "text": {
-                        "elements": [{
-                            "text_run": {
-                                "content": f"📄 {n}",
-                                "text_element_style": {"link": {"url": file_url}}
-                            }
-                        }]
-                    }
-                }
-                b_type = 2
+                if "file" in b_new:
+                    f_data = b_new["file"]
+                    token = f_data.get("token")
+                    name = f_data.get("name", "File")
+                    file_url = f"https://www.feishu.cn/file/{token}"
 
+                    # Determine icon based on file extension
+                    icon = "📄"
+                    if name.lower().endswith('.pdf'):
+                        icon = "📑"
+                    elif name.lower().endswith(('.zip', '.rar', '.7z', '.tar')):
+                        icon = "📦"
+                    elif name.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
+                        icon = "🎬"
+
+                    # Convert to text block with link
+                    b_new = {
+                        "block_type": 2,
+                        "text": {
+                            "elements": [{
+                                "text_run": {
+                                    "content": f"{icon} {name}",
+                                    "text_element_style": {
+                                        "link": {
+                                            "url": file_url
+                                        }
+                                    }
+                                }
+                            }]
+                        }
+                    }
+                    # Update block type
+                    b_type = 2
+
+            # Handle Image Block (Type 27)
+            # If token is empty, the image will be uploaded after block creation
+            if b_type == 27:
+                if "image" in b_new:
+                    token = b_new["image"].get("token")
+                    # If token is empty, provide empty image object
+                    # Feishu will create an empty image block
+                    if not token or token == "":
+                        b_new["image"] = {}
+                    else:
+                        b_new["image"] = {"token": token}
+                else:
+                    # If no image field at all, add empty one
+                    b_new["image"] = {}
+            
             # Handle Ordered List Style
             if b_type == 13:
                 if "ordered" not in b_new: b_new["ordered"] = {}
@@ -313,8 +365,21 @@ class FeishuClient:
                     for el in content_obj["elements"]:
                         if "text_run" in el:
                             tr = el["text_run"]
-                            if "text_element_style" in tr and not tr["text_element_style"]:
-                                del tr["text_element_style"]
+                            if "text_element_style" in tr:
+                                # Recursively check if style object is empty or has all false/null values
+                                style = tr["text_element_style"]
+                                if not style or all(not v for v in style.values()):
+                                    del tr["text_element_style"]
+                                # IMPORTANT: Check for 'link' object inside style
+                                elif "link" in style:
+                                    # If link is present but empty or invalid, it might cause issues too
+                                    # But usually link has 'url', so it's truthy.
+                                    # Let's ensure 'link' object is valid if present
+                                    if not style["link"] or not style["link"].get("url"):
+                                         del style["link"]
+                                         # Re-check if style is empty after removing link
+                                         if not style or all(not v for v in style.values()):
+                                             del tr["text_element_style"]
             return b_new
 
         for i in range(0, len(blocks_dict_list), chunk_size):
@@ -323,7 +388,7 @@ class FeishuClient:
             current_index = index if (index != -1 and i == 0) else -1
             
             body = {"children": payload_children, "index": current_index}
-            
+
             try:
                 resp = requests.post(url, headers=headers, json=body)
                 if resp.status_code == 200:
@@ -335,8 +400,6 @@ class FeishuClient:
                         logger.error(f"Batch create failed (API Error):")
                         logger.error(f"   - Code: {res_json.get('code')}")
                         logger.error(f"   - Msg: {res_json.get('msg')}")
-                        # logger.debug(f"   - Parent ID: {parent_id}")
-                        # logger.debug(f"   - Full Payload: {json.dumps(body, indent=2, ensure_ascii=False)}")
                 else:
                     logger.error(f"Batch create failed (HTTP {resp.status_code}):")
                     logger.error(f"   - Response: {resp.text}")

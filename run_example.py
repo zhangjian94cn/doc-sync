@@ -7,10 +7,10 @@ def main():
     print("   Doc Sync - 示例运行脚本")
     print("=" * 50)
     
-    # Check if .env exists
-    if not os.path.exists(".env"):
-        print("❌ 未检测到 .env 配置文件。")
-        print("请先复制 .env.example 为 .env 并填入你的飞书 App ID 和 Secret。")
+    # Check if sync_config.json exists (New Config System)
+    if not os.path.exists("sync_config.json"):
+        print("❌ 未检测到 sync_config.json 配置文件。")
+        print("请参考 README.md 创建配置文件并填入你的飞书 App ID 和 Secret。")
         return
 
     example_dir = os.path.abspath("examples/sample_vault")

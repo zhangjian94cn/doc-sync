@@ -109,54 +109,10 @@ class FeishuAuthenticator:
             print(f"Exception refreshing token: {e}")
         return None
 
-    def save_tokens_to_env(self, access_token, refresh_token=None):
-        # Read existing .env
-        lines = []
-        if os.path.exists(ENV_FILE):
-            with open(ENV_FILE, "r") as f:
-                lines = f.readlines()
-        
-        env_map = {}
-        for line in lines:
-            if '=' in line:
-                key, val = line.strip().split('=', 1)
-                env_map[key] = val
-        
-        # Update map
-        env_map["FEISHU_USER_ACCESS_TOKEN"] = access_token
-        if refresh_token:
-            env_map["FEISHU_USER_REFRESH_TOKEN"] = refresh_token
-            
-        # Write back (preserving order is hard if we use map, so let's use line replacement)
-        new_lines = []
-        keys_written = set()
-        
-        for line in lines:
-            if '=' in line:
-                key = line.split('=')[0].strip()
-                if key == "FEISHU_USER_ACCESS_TOKEN":
-                    new_lines.append(f"FEISHU_USER_ACCESS_TOKEN={access_token}\n")
-                    keys_written.add(key)
-                elif key == "FEISHU_USER_REFRESH_TOKEN" and refresh_token:
-                    new_lines.append(f"FEISHU_USER_REFRESH_TOKEN={refresh_token}\n")
-                    keys_written.add(key)
-                else:
-                    new_lines.append(line)
-            else:
-                new_lines.append(line)
-        
-        # Append if new
-        if "FEISHU_USER_ACCESS_TOKEN" not in keys_written:
-             if new_lines and not new_lines[-1].endswith('\n'): new_lines.append('\n')
-             new_lines.append(f"FEISHU_USER_ACCESS_TOKEN={access_token}\n")
-             
-        if refresh_token and "FEISHU_USER_REFRESH_TOKEN" not in keys_written:
-             if new_lines and not new_lines[-1].endswith('\n'): new_lines.append('\n')
-             new_lines.append(f"FEISHU_USER_REFRESH_TOKEN={refresh_token}\n")
-
-        with open(ENV_FILE, "w") as f:
-            f.writelines(new_lines)
-        print("✅ Tokens saved to .env")
+    def save_tokens_to_config(self, access_token, refresh_token=None):
+        import config
+        config.save_tokens(access_token, refresh_token)
+        print("✅ Tokens saved to sync_config.json")
 
     def login(self):
         print("\n🚀 Initiating Feishu Login...")
@@ -177,7 +133,7 @@ class FeishuAuthenticator:
             
         if auth_result["token"]:
             print("✅ Login Successful!")
-            self.save_tokens_to_env(auth_result["token"], auth_result["refresh_token"])
+            self.save_tokens_to_config(auth_result["token"], auth_result["refresh_token"])
             return auth_result["token"]
         else:
             print("❌ Login Failed.")
@@ -188,15 +144,6 @@ class FeishuAuthenticator:
         refresh_token = config.FEISHU_USER_REFRESH_TOKEN
         
         if not refresh_token:
-            # Fallback: Read directly from .env (in case config is stale)
-            if os.path.exists(ENV_FILE):
-                with open(ENV_FILE, 'r') as f:
-                    for line in f:
-                        if line.startswith("FEISHU_USER_REFRESH_TOKEN="):
-                            refresh_token = line.split('=', 1)[1].strip()
-                            break
-        
-        if not refresh_token:
             print("❌ No Refresh Token found. Cannot auto-refresh.")
             return None
             
@@ -205,11 +152,11 @@ class FeishuAuthenticator:
         if data:
             new_access = data.get("access_token")
             new_refresh = data.get("refresh_token")
-            self.save_tokens_to_env(new_access, new_refresh)
+            self.save_tokens_to_config(new_access, new_refresh)
             
-            # Update memory config
-            config.FEISHU_USER_ACCESS_TOKEN = new_access
-            config.FEISHU_USER_REFRESH_TOKEN = new_refresh
+            # Update memory config (save_tokens handles this but good to be explicit)
+            # config.FEISHU_USER_ACCESS_TOKEN = new_access
+            # config.FEISHU_USER_REFRESH_TOKEN = new_refresh
             
             print(f"✅ Token Refreshed!")
             return new_access

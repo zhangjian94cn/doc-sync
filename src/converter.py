@@ -196,7 +196,7 @@ class MarkdownToFeishu:
                             blocks.append({"block_type": 23, "file": {"token": file_path, "name": alt or os.path.basename(file_path)}})
                             print(f"✅ 文件路径已解析: {file_path}")
                         else:
-                            blocks.append({"block_type": 27, "image": {"token": file_path}, "alt": alt})
+                            blocks.append({"block_type": 27, "image": {"token": file_path}})
                             print(f"✅ 图片路径已解析: {file_path}")
                     else:
                         print(f"❌ 资源解析失败: {src}")
