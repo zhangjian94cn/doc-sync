@@ -227,21 +227,27 @@ def main():
                     new_token = auth.refresh()
                     if new_token:
                         user_token = new_token
-                        config.FEISHU_USER_ACCESS_TOKEN = new_token
+                        from src import config as src_config
+                        src_config.FEISHU_USER_ACCESS_TOKEN = new_token
                         # Re-init Client with new token
                         client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
                         logger.success("Token 自动刷新成功")
                     else:
-                        logger.error("自动刷新失败，需重新登录。")
-                        user_token = None
+                        logger.error("自动刷新失败，Token 已过期。")
+                        logger.error("请运行以下命令重新登录:")
+                        logger.error("  python3 scripts/setup_wizard.py")
+                        logger.error("或手动运行:")
+                        logger.error("  python3 -c 'from src.auth import FeishuAuthenticator; FeishuAuthenticator().login()'")
+                        sys.exit(1)
                 else:
                     # Other errors (e.g. permission denied for user_info) shouldn't block main flow if token is valid?
                     # But 99991677 is specific to expiry.
                     # Let's print warning but continue, maybe sync permissions are fine.
                     logger.warning(f"Token 校验警告: {resp.code} {resp.msg}")
         except Exception as e:
-            # logger.warning(f"Token 校验跳过: {e}")
-            pass
+            logger.warning(f"Token 校验异常: {e}")
+            import traceback
+            traceback.print_exc()
 
     if not user_token and sys.stdin.isatty():
         logger.warning("未检测到 User Access Token (推荐用于解决权限问题)。")
@@ -258,6 +264,8 @@ def main():
                     user_token = new_token
                     # Update config module in memory is tricky if imported as from config import ...
                     # But we passed user_token to FeishuClient below, so it's fine for this run.
+                    from src import config
+                    config.FEISHU_USER_ACCESS_TOKEN = user_token # Update global config
         except KeyboardInterrupt:
             logger.info("\n操作取消")
             return
@@ -265,12 +273,12 @@ def main():
     # Init Client
     # Pass USER_ACCESS_TOKEN if available, otherwise it defaults to Tenant Token
     client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
-    
+
     # Note: We need to ensure SyncManager also uses this token.
-    # SyncManager currently imports from config.py directly.
+    # SyncManager currently imports from src.config directly.
     # So we MUST update config module.
-    import config
-    config.FEISHU_USER_ACCESS_TOKEN = user_token
+    from src import config as src_config
+    src_config.FEISHU_USER_ACCESS_TOKEN = user_token
     
     # Mode 1: Single task via CLI args
     if args.md_path and args.doc_token:

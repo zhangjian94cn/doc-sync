@@ -403,6 +403,8 @@ class FeishuClient:
                 else:
                     logger.error(f"Batch create failed (HTTP {resp.status_code}):")
                     logger.error(f"   - Response: {resp.text}")
+                    # Debug: Print payload to identify invalid param
+                    logger.debug(f"   - Payload: {json.dumps(body, indent=2, ensure_ascii=False)}")
             except Exception as e:
                 logger.error(f"Batch create exception: {e}")
         return created_ids

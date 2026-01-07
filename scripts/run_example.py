@@ -31,10 +31,15 @@ def main():
             f.write(valid_png)
 
     print(f"📂 示例数据目录: {example_dir}")
-    print("\n请输入目标飞书文件夹 Token (直接回车将使用 'root' 根目录):")
-    print("提示: 建议创建一个新文件夹并粘贴其 Token，以免混淆根目录文件。")
     
-    token = input("Target Cloud Token [root]: ").strip()
+    # Allow token as command line argument
+    if len(sys.argv) > 1:
+        token = sys.argv[1]
+    else:
+        print("\n请输入目标飞书文件夹 Token (直接回车将使用 'root' 根目录):")
+        print("提示: 建议创建一个新文件夹并粘贴其 Token，以免混淆根目录文件。")
+        token = input("Target Cloud Token [root]: ").strip()
+    
     if not token:
         token = "root"
     

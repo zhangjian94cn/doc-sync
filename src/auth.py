@@ -110,7 +110,7 @@ class FeishuAuthenticator:
         return None
 
     def save_tokens_to_config(self, access_token, refresh_token=None):
-        import config
+        from src import config
         config.save_tokens(access_token, refresh_token)
         print("✅ Tokens saved to sync_config.json")
 
@@ -140,7 +140,7 @@ class FeishuAuthenticator:
             return None
 
     def refresh(self):
-        import config
+        from src import config
         refresh_token = config.FEISHU_USER_REFRESH_TOKEN
         
         if not refresh_token:
