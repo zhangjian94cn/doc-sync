@@ -1,21 +1,23 @@
 import os
 import sys
-import time
-import shutil
-import json
 import hashlib
-import lark_oapi as lark
+import json
+import shutil
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import IntEnum
 from urllib.parse import unquote
 import difflib
 
+import lark_oapi as lark
+
 from src import config
+from src.config import SYNC_DIFF_THRESHOLD
 from src.feishu_client import FeishuClient
 from src.converter import MarkdownToFeishu, FeishuToMarkdown
 from src.utils import pad_center, parse_cloud_time
 from src.logger import logger
+from src.resource_index import ResourceIndex
 
 class SyncResult(IntEnum):
     SUCCESS = 0
@@ -23,12 +25,22 @@ class SyncResult(IntEnum):
     ERROR = 2
 
 class SyncManager:
-    def __init__(self, md_path: str, doc_token: str, force: bool = False, vault_root: str = None, client: FeishuClient = None, batch_id: str = None):
+    """Manages synchronization between local Markdown files and Feishu documents."""
+    
+    # Class-level resource index cache
+    _resource_index: Optional[ResourceIndex] = None
+    _resource_index_root: Optional[str] = None
+    
+    def __init__(self, md_path: str, doc_token: str, force: bool = False, 
+                 vault_root: str = None, client: FeishuClient = None, batch_id: str = None):
         self.md_path = os.path.abspath(md_path)
         self.doc_token = doc_token
         self.force = force
         self.vault_root = vault_root or os.path.dirname(self.md_path)
         self.batch_id = batch_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Initialize or reuse resource index
+        self._init_resource_index()
         
         if client:
             self.client = client
@@ -38,6 +50,20 @@ class SyncManager:
                 config.FEISHU_APP_SECRET,
                 user_access_token=config.FEISHU_USER_ACCESS_TOKEN
             )
+    
+    def _init_resource_index(self) -> None:
+        """Initialize or reuse the resource index for the vault."""
+        if (SyncManager._resource_index is None or 
+            SyncManager._resource_index_root != self.vault_root):
+            logger.debug(f"构建资源索引: {self.vault_root}")
+            SyncManager._resource_index = ResourceIndex(
+                self.vault_root,
+                extensions={'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp',
+                           'mp4', 'mov', 'avi', 'mkv', 'webm',
+                           'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+                           'zip', 'rar', '7z', 'tar'}
+            )
+            SyncManager._resource_index_root = self.vault_root
 
     def run(self, debug=False):
         logger.header(f"任务: {os.path.basename(self.md_path)}", icon="📄")
@@ -146,7 +172,7 @@ class SyncManager:
         if ops_count == 0:
             logger.success("内容已同步，无需更新。"); return
 
-        if ops_count > 15 or not root_children:
+        if ops_count > SYNC_DIFF_THRESHOLD or not root_children:
             logger.warning("变更较多或为空文档，使用全量覆盖模式...")
             self.client.clear_document(self.doc_token)
             self.client.add_blocks(self.doc_token, local_blocks)
@@ -163,51 +189,27 @@ class SyncManager:
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
 
     def _resource_uploader(self, path: str) -> Optional[str]:
-        if not path or path.startswith("http"): return None
+        """Resolve resource path using the cached index."""
+        if not path or path.startswith("http"):
+            return None
         
         # URL decode first (e.g., %E4%B8%AD%E6%96%87.png -> 中文.png)
         decoded_path = unquote(path)
         
-        real_path = decoded_path
+        # Use ResourceIndex for efficient lookup
+        if SyncManager._resource_index:
+            real_path = SyncManager._resource_index.find(decoded_path)
+            if real_path and os.path.exists(real_path):
+                return real_path
         
-        # List of potential base directories to search in
-        search_dirs = [
-            os.path.dirname(self.md_path),  # Current file directory
-            self.vault_root,                # Vault root
-            os.path.join(self.vault_root, "assets"), # Common assets folder
-            os.path.join(self.vault_root, "attachments"), # Obsidian attachments
-            os.path.join(self.vault_root, "resources"),
-            os.path.join(self.vault_root, "image"),
-            os.path.join(self.vault_root, "images")
-        ]
-
-        found = False
+        # Fallback: try path relative to current file
+        md_dir = os.path.dirname(self.md_path)
+        candidate = os.path.join(md_dir, decoded_path)
+        if os.path.exists(candidate):
+            return candidate
         
-        # Strategy 1: Check exact path relative to search dirs
-        if not os.path.isabs(decoded_path):
-            for base_dir in search_dirs:
-                candidate = os.path.join(base_dir, decoded_path)
-                if os.path.exists(candidate):
-                    real_path = candidate
-                    found = True
-                    break
-        
-        # Strategy 2: Recursive search in Vault if not found
-        # This is expensive but necessary for "shortest path" links in Obsidian
-        if not found and not os.path.exists(real_path):
-            filename = os.path.basename(decoded_path)
-            for root, dirs, files in os.walk(self.vault_root):
-                if filename in files:
-                    real_path = os.path.join(root, filename)
-                    found = True
-                    break
-
-        if not os.path.exists(real_path):
-            logger.error(f"本地资源未找到: {path} (尝试路径: {real_path})"); return None
-
-        # Return the local path instead of uploading immediately
-        # The upload will be handled by add_blocks method
-        return real_path
+        logger.error(f"本地资源未找到: {path}")
+        return None
 
     def _sync_cloud_to_local(self) -> SyncResult:
         try:
@@ -251,7 +253,10 @@ class SyncManager:
             logger.error(f"Verification failed: {e}")
 
 class FolderSyncManager:
-    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, vault_root: str = None, debug: bool = False, client: FeishuClient = None):
+    """Manages folder-level synchronization with concurrent file processing."""
+    
+    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, 
+                 vault_root: str = None, debug: bool = False, client: FeishuClient = None):
         self.local_root = local_root
         self.cloud_root_token = cloud_root_token
         self.force = force
@@ -263,36 +268,115 @@ class FolderSyncManager:
         else:
             self.client = FeishuClient(config.FEISHU_APP_ID, config.FEISHU_APP_SECRET, user_access_token=config.FEISHU_USER_ACCESS_TOKEN)
         self.stats = {"created": 0, "updated": 0, "skipped": 0, "failed": 0}
+        self._stats_lock = None  # Will be initialized in run()
 
     def run(self):
+        """Run folder synchronization with concurrent file processing."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
+        self._stats_lock = threading.Lock()
+        
         logger.header(f"开始文件夹同步: {self.local_root} -> {self.cloud_root_token}", icon="🚀")
-        self._sync_folder(self.local_root, self.cloud_root_token)
+        
+        # Collect all sync tasks first
+        sync_tasks = self._collect_sync_tasks(self.local_root, self.cloud_root_token)
+        
+        if not sync_tasks:
+            logger.info("没有需要同步的文件。", icon="✓")
+            return
+        
+        logger.info(f"发现 {len(sync_tasks)} 个文件需要同步，使用 {config.MAX_PARALLEL_WORKERS} 个并行工作线程...", icon="⚡")
+        
+        # Process sync tasks in parallel
+        with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_WORKERS) as executor:
+            futures = {executor.submit(self._execute_sync_task, task): task for task in sync_tasks}
+            
+            for future in as_completed(futures):
+                task = futures[future]
+                try:
+                    result = future.result()
+                    with self._stats_lock:
+                        if result == "created":
+                            self.stats["created"] += 1
+                        elif result == "updated":
+                            self.stats["updated"] += 1
+                        elif result == "failed":
+                            self.stats["failed"] += 1
+                except Exception as e:
+                    logger.error(f"同步任务失败: {task['local_path']}: {e}")
+                    with self._stats_lock:
+                        self.stats["failed"] += 1
+        
         logger.info(f"同步汇总: 新增 {self.stats['created']}, 更新 {self.stats['updated']}, 跳过 {self.stats['skipped']}, 失败 {self.stats['failed']}", icon="📊")
 
-    def _sync_folder(self, local_path, cloud_token):
-        try: local_items = os.listdir(local_path)
-        except: return
+    def _collect_sync_tasks(self, local_path: str, cloud_token: str) -> List[Dict[str, Any]]:
+        """Recursively collect all sync tasks from folder."""
+        tasks = []
+        
+        try:
+            local_items = os.listdir(local_path)
+        except OSError as e:
+            logger.error(f"无法读取目录 {local_path}: {e}")
+            return tasks
+        
         cloud_files = self.client.list_folder_files(cloud_token)
         cloud_map = {f.name: f for f in cloud_files}
+        
         for item in local_items:
-            if item.startswith('.') or item == "assets": continue
+            if item.startswith('.') or item == "assets":
+                continue
+            
             item_path = os.path.join(local_path, item)
+            
             if os.path.isdir(item_path):
+                # Handle subdirectories
                 if item in cloud_map and cloud_map[item].type == "folder":
-                    self._sync_folder(item_path, cloud_map[item].token)
+                    # Recursively collect from existing folder
+                    tasks.extend(self._collect_sync_tasks(item_path, cloud_map[item].token))
                 else:
+                    # Create new folder and recurse
                     new_token = self.client.create_folder(cloud_token, item)
-                    if new_token: self._sync_folder(item_path, new_token)
+                    if new_token:
+                        tasks.extend(self._collect_sync_tasks(item_path, new_token))
+                        
             elif item.endswith(".md"):
                 doc_name = item[:-3]
                 if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
-                    sync = SyncManager(item_path, cloud_map[doc_name].token, self.force, vault_root=self.vault_root, client=self.client, batch_id=self.batch_id)
-                    sync.run(debug=self.debug)
-                    self.stats["updated"] += 1
+                    tasks.append({
+                        "local_path": item_path,
+                        "doc_token": cloud_map[doc_name].token,
+                        "is_new": False
+                    })
                 else:
+                    # Create new document
                     new_token = self.client.create_docx(cloud_token, doc_name)
                     if new_token:
-                        sync = SyncManager(item_path, new_token, force=True, vault_root=self.vault_root, client=self.client, batch_id=self.batch_id)
-                        sync.run(debug=self.debug)
-                        self.stats["created"] += 1
-                    else: self.stats["failed"] += 1
+                        tasks.append({
+                            "local_path": item_path,
+                            "doc_token": new_token,
+                            "is_new": True
+                        })
+                    else:
+                        with self._stats_lock:
+                            self.stats["failed"] += 1
+        
+        return tasks
+
+    def _execute_sync_task(self, task: Dict[str, Any]) -> str:
+        """Execute a single sync task. Returns 'created', 'updated', or 'failed'."""
+        try:
+            sync = SyncManager(
+                task["local_path"], 
+                task["doc_token"], 
+                force=self.force or task["is_new"],
+                vault_root=self.vault_root, 
+                client=self.client, 
+                batch_id=self.batch_id
+            )
+            sync.run(debug=self.debug)
+            return "created" if task["is_new"] else "updated"
+        except Exception as e:
+            logger.error(f"同步失败 {os.path.basename(task['local_path'])}: {e}")
+            return "failed"
+

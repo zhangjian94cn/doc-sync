@@ -1,10 +1,21 @@
 import re
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from markdown_it import MarkdownIt
 
+from src.logger import logger
+
 class MarkdownToFeishu:
-    def __init__(self, image_uploader=None):
+    """Convert Markdown content to Feishu document blocks."""
+    
+    def __init__(self, image_uploader: Optional[Callable[[str], Optional[str]]] = None):
+        """
+        Initialize the converter.
+        
+        Args:
+            image_uploader: Optional callback function to resolve/upload images.
+                           Takes a path string, returns the resolved path or None.
+        """
         self.md = MarkdownIt()
         self.image_uploader = image_uploader
         self.list_depth = 0
@@ -57,7 +68,7 @@ class MarkdownToFeishu:
             2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
             6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
             10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
-            14: "code", 22: "todo",
+            14: "code", 15: "quote", 22: "todo",
         }
         return mapping.get(block_type, "text")
 
@@ -95,7 +106,22 @@ class MarkdownToFeishu:
                     inline_token = tokens[i+1]
                     i += 1
                 
-                if list_type_stack:
+                # Check if we're inside a blockquote
+                in_blockquote = any(t.type == 'blockquote_open' for t in tokens[:i] 
+                                   if t.type in ('blockquote_open', 'blockquote_close'))
+                # More accurate: count opens vs closes
+                quote_opens = sum(1 for t in tokens[:i] if t.type == 'blockquote_open')
+                quote_closes = sum(1 for t in tokens[:i] if t.type == 'blockquote_close')
+                in_blockquote = quote_opens > quote_closes
+                
+                if in_blockquote:
+                    # Create a quote block (type 15)
+                    block_content = self._create_text_elements_from_token(inline_token)
+                    block = {
+                        "block_type": 15,
+                        "quote": block_content
+                    }
+                elif list_type_stack:
                     list_type = list_type_stack[-1]
                     block_type = 12 if list_type == 'bullet' else 13
                     field_name = self._get_block_field_name(block_type)
@@ -118,6 +144,13 @@ class MarkdownToFeishu:
                     "block_type": 14,
                     "code": {"elements": [{"text_run": {"content": content}}]}
                 }
+            
+            # Handle blockquote
+            elif token.type == 'blockquote_open':
+                # We'll collect content in the next paragraph
+                pass
+            elif token.type == 'blockquote_close':
+                pass
 
             if block:
                 self._add_block_to_tree(block, root_blocks, parent_stack, last_block_stack)
@@ -189,17 +222,17 @@ class MarkdownToFeishu:
                 is_media_file = ext in {'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'tar', 'txt', 'md'}
                 
                 if src and self.image_uploader:
-                    print(f" 发现资源引用 ({ext}), 准备处理: {src}")
+                    logger.debug(f" 发现资源引用 ({ext}), 准备处理: {src}")
                     file_path = self.image_uploader(src)
                     if file_path:
                         if is_media_file:
                             blocks.append({"block_type": 23, "file": {"token": file_path, "name": alt or os.path.basename(file_path)}})
-                            print(f"✅ 文件路径已解析: {file_path}")
+                            logger.debug(f"文件路径已解析: {file_path}")
                         else:
                             blocks.append({"block_type": 27, "image": {"token": file_path}})
-                            print(f"✅ 图片路径已解析: {file_path}")
+                            logger.debug(f"图片路径已解析: {file_path}")
                     else:
-                        print(f"❌ 资源解析失败: {src}")
+                        logger.warning(f"资源解析失败: {src}")
                         current_elements.append({"text_run": {"content": f"![{alt}]({src})"} })
                 else:
                     current_elements.append({"text_run": {"content": f"![{alt}]({src})"} })
@@ -322,7 +355,7 @@ class FeishuToMarkdown:
             image_obj = block.image
             token = image_obj.token
             if self.image_downloader:
-                print(f"📥 发现云端图片，准备下载: {token}")
+                logger.debug(f"发现云端图片，准备下载: {token}")
                 local_path = self.image_downloader(token)
                 if local_path: return f"![Image]({local_path})"
                 else: return f"![下载失败]({token})"

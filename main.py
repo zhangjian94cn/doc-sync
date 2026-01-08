@@ -15,20 +15,34 @@ from src.feishu_client import FeishuClient
 from src.logger import logger
 from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
 
-def load_config(config_path):
+def load_config(config_path: str) -> list:
+    """
+    Load sync tasks from configuration file.
+    
+    Args:
+        config_path: Path to the JSON configuration file
+        
+    Returns:
+        List of task configurations, empty list if loading fails
+    """
     if not os.path.exists(config_path):
         return []
-    with open(config_path, 'r', encoding='utf-8') as f:
-        try:
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             # Support both new dict format and old list format
             if isinstance(data, dict):
                 return data.get("tasks", [])
             elif isinstance(data, list):
                 return data
-        except:
             return []
-    return []
+    except json.JSONDecodeError as e:
+        logger.error(f"配置文件 JSON 格式错误: {e}")
+        return []
+    except IOError as e:
+        logger.error(f"读取配置文件失败: {e}")
+        return []
 
 def find_vault_root(path: str) -> Optional[str]:
     """

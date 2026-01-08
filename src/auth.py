@@ -2,14 +2,14 @@ import http.server
 import socketserver
 import urllib.parse
 import webbrowser
-import requests
-import json
-import os
 import threading
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET
+from typing import Optional, Dict, Any
 
-PORT = 8000
-REDIRECT_URI = f"http://127.0.0.1:{PORT}/callback"
+import requests
+
+from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, AUTH_SERVER_PORT
+
+REDIRECT_URI = f"http://127.0.0.1:{AUTH_SERVER_PORT}/callback"
 ENV_FILE = ".env"
 
 # Shared result container
@@ -126,7 +126,7 @@ class FeishuAuthenticator:
         auth_result["token"] = None
         auth_result["refresh_token"] = None
         
-        with socketserver.TCPServer(("", PORT), AuthHandler) as httpd:
+        with socketserver.TCPServer(("", AUTH_SERVER_PORT), AuthHandler) as httpd:
             httpd.authenticator = self
             print(f"📡 Waiting for callback...")
             httpd.serve_forever()

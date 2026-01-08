@@ -1,5 +1,7 @@
 import json
 import os
+from typing import Any, Dict, List, Optional
+
 import requests
 import lark_oapi as lark
 from lark_oapi.api.docx.v1 import *
@@ -7,7 +9,9 @@ from lark_oapi.api.drive.v1 import *
 from lark_oapi.api.drive.v1.model.batch_query_meta_request import BatchQueryMetaRequest
 from lark_oapi.api.drive.v1.model.meta_request import MetaRequest
 from lark_oapi.api.drive.v1.model.request_doc import RequestDoc
+
 from src.logger import logger
+from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 class FeishuClient:
     def __init__(self, app_id: str, app_secret: str, user_access_token: str = None):
@@ -28,15 +32,21 @@ class FeishuClient:
         return None
 
     def _get_tenant_access_token(self) -> Optional[str]:
+        """Get tenant access token from Feishu API."""
         url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
         headers = {"Content-Type": "application/json; charset=utf-8"}
         data = {"app_id": self.app_id, "app_secret": self.app_secret}
         try:
-            resp = requests.post(url, headers=headers, json=data)
+            resp = requests.post(url, headers=headers, json=data, timeout=10)
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 return resp.json().get("tenant_access_token")
+            logger.warning(f"获取 tenant_access_token 失败: {resp.status_code}")
             return None
-        except:
+        except requests.exceptions.Timeout:
+            logger.error("获取 tenant_access_token 超时")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"获取 tenant_access_token 网络错误: {e}")
             return None
 
     def upload_file(self, file_path: str, parent_node_token: str, drive_route_token: str = None, parent_type: str = None) -> Optional[str]:
@@ -291,7 +301,7 @@ class FeishuClient:
         }
         
         created_ids = []
-        chunk_size = 10  # Reduce chunk size to avoid format issues
+        chunk_size = BATCH_CHUNK_SIZE  # Use config constant
         
         def clean_block(b):
             b_new = b.copy()

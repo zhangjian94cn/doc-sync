@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-sync"
+version = "1.0.0"
+description = "Seamlessly sync your Obsidian vault to Feishu/Lark cloud documents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.7"
+authors = [
+    {name = "zhangjian94cn", email = "zhangjian94cn@gmail.com"}
+]
+keywords = ["obsidian", "feishu", "lark", "markdown", "sync", "document"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+
+dependencies = [
+    "lark-oapi>=1.0.0,<2.0.0",
+    "python-dotenv>=1.0.0",
+    "markdown-it-py>=3.0.0",
+    "requests>=2.28.0",
+    "keyring>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhangjian94cn/doc-sync"
+Repository = "https://github.com/zhangjian94cn/doc-sync.git"
+Issues = "https://github.com/zhangjian94cn/doc-sync/issues"
+
+[project.scripts]
+docsync = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+python_version = "3.7"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py37"
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]  # Line too long (handled by line-length)
