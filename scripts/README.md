@@ -1,98 +1,56 @@
-# 脚本工具目录
+# DocSync Scripts
 
-此目录包含 DocSync 的各种辅助脚本和工具。
+本目录包含 DocSync 的辅助脚本工具。
 
-## 工具脚本
-
-### 🎨 setup_wizard.py
-**配置向导** - 交互式配置工具
+## 🚀 推荐方式：统一 CLI
 
 ```bash
-python3 scripts/setup_wizard.py
+# 配置向导 - 交互式配置 App ID、同步任务
+python scripts/cli.py setup
+
+# 健康检查 - 检查依赖、配置、连接
+python scripts/cli.py check
+
+# 执行同步
+python scripts/cli.py sync
+python scripts/cli.py sync --force    # 强制覆盖
+python scripts/cli.py sync --task "工作笔记"  # 指定任务
+
+# 运行示例
+python scripts/cli.py example
 ```
 
-功能：
-- 引导您配置飞书应用
-- 创建同步任务
-- 自动生成配置文件
-- 输入验证和帮助提示
+## 📁 脚本说明
 
-### 🩺 health_check.py
-**健康检查** - 环境和配置诊断工具
+| 脚本 | 说明 | 推荐用法 |
+|------|------|----------|
+| `cli.py` | **统一命令行入口** | `python scripts/cli.py <command>` |
+| `setup_wizard.py` | 详细配置向导 | 使用 `cli.py setup` 替代 |
+| `health_check.py` | 详细健康检查 | 使用 `cli.py check` 替代 |
+| `run_example.py` | 运行示例 | 使用 `cli.py example` 替代 |
+
+## ⚡ 快速开始
 
 ```bash
-python3 scripts/health_check.py
+# 首次使用
+python scripts/cli.py setup   # 1. 配置
+python scripts/cli.py check   # 2. 检查
+python main.py                # 3. 同步
+
+# 日常使用
+python main.py                # 直接同步
 ```
 
-检查项目：
-- Python 版本
-- 依赖包安装
-- 配置文件完整性
-- 飞书 API 连接
-- 任务配置验证
+## 🔧 高级用法
 
-### 🧪 run_example.py
-**示例运行脚本** - 快速测试同步功能
-
+### 定时同步 (crontab)
 ```bash
-python3 scripts/run_example.py
+# 每小时同步
+0 * * * * cd /path/to/doc-sync && python main.py >> /tmp/docsync.log 2>&1
 ```
 
-功能：
-- 使用示例数据测试同步
-- 验证功能是否正常
-
-### 🔧 run_sync_task.sh
-**同步任务脚本** - Shell 脚本封装
-
+### 调试模式
 ```bash
-./scripts/run_sync_task.sh
-```
-
-### 🖥️ start_gui.sh
-**GUI 启动脚本** - 启动 Electron 图形界面
-
-```bash
-./scripts/start_gui.sh
-```
-
-## 使用建议
-
-### 首次使用
-
-1. **运行配置向导**：
-   ```bash
-   python3 scripts/setup_wizard.py
-   ```
-
-2. **健康检查**：
-   ```bash
-   python3 scripts/health_check.py
-   ```
-
-3. **开始同步**：
-   ```bash
-   python3 main.py
-   ```
-
-### 日常使用
-
-```bash
-# 正常同步
-python3 main.py
-
-# 调试模式
 export DOCSYNC_LOG_LEVEL=DEBUG
-python3 main.py
-
-# 强制覆盖
-python3 main.py --force
-```
-
-## 权限说明
-
-某些脚本可能需要执行权限：
-
-```bash
-chmod +x scripts/*.sh
+python main.py
 ```
