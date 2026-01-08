@@ -1,6 +1,6 @@
 import sys
-import logging
 import os
+import threading
 from datetime import datetime
 from enum import Enum
 
@@ -27,18 +27,20 @@ class LogLevel(Enum):
 
 class Logger:
     """
-    增强的日志记录器
+    增强的日志记录器（线程安全）
 
     支持：
     - 彩色输出
     - 日志级别控制
     - 时间戳
     - 图标显示
+    - 多线程安全
     """
 
     def __init__(self, name="DocSync", level=LogLevel.INFO):
         self.name = name
         self.level = level
+        self._lock = threading.Lock()  # 线程锁，确保日志输出原子性
 
         # 从环境变量读取日志级别
         env_level = os.getenv("DOCSYNC_LOG_LEVEL", "").upper()
@@ -58,12 +60,16 @@ class Logger:
         return level.value >= self.level.value
 
     def _log(self, level: LogLevel, level_color, level_icon, message, end="\n"):
-        """内部日志方法"""
+        """内部日志方法（线程安全）"""
         if not self._should_log(level):
             return
 
         timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"{Colors.CYAN}[{timestamp}]{Colors.ENDC} {level_color}{level_icon} {message}{Colors.ENDC}", end=end)
+        log_line = f"{Colors.CYAN}[{timestamp}]{Colors.ENDC} {level_color}{level_icon} {message}{Colors.ENDC}"
+        
+        # 使用锁确保完整的日志行作为原子操作输出
+        with self._lock:
+            print(log_line, end=end, flush=True)
 
     def debug(self, message, icon="🔧"):
         """调试信息 - 仅在 DEBUG 模式显示"""
@@ -86,26 +92,35 @@ class Logger:
         self._log(LogLevel.ERROR, Colors.FAIL, icon, message)
 
     def header(self, message, icon=""):
-        """打印标题"""
+        """打印标题（线程安全）"""
         if not self._should_log(LogLevel.INFO):
             return
 
-        print(f"\n{Colors.BOLD}{Colors.HEADER}{'='*40}")
+        # 构建完整的标题块，一次性输出
+        lines = []
+        lines.append(f"\n{Colors.BOLD}{Colors.HEADER}{'='*40}")
         if icon:
-            print(f" {icon} {message}")
+            lines.append(f" {icon} {message}")
         else:
-            print(f" {message}")
-        print(f"{'='*40}{Colors.ENDC}")
+            lines.append(f" {message}")
+        lines.append(f"{'='*40}{Colors.ENDC}")
+        
+        with self._lock:
+            print("\n".join(lines), flush=True)
 
     def rule(self, message=""):
-        """打印分隔线"""
+        """打印分隔线（线程安全）"""
         if not self._should_log(LogLevel.INFO):
             return
 
         if message:
-            print(f"{Colors.CYAN}{'-'*10} {message} {'-'*10}{Colors.ENDC}")
+            line = f"{Colors.CYAN}{'-'*10} {message} {'-'*10}{Colors.ENDC}"
         else:
-            print(f"{Colors.CYAN}{'-'*40}{Colors.ENDC}")
+            line = f"{Colors.CYAN}{'-'*40}{Colors.ENDC}"
+        
+        with self._lock:
+            print(line, flush=True)
 
 # 全局日志实例
 logger = Logger()
+
