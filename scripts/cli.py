@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 DocSync CLI - 统一命令行入口
-整合配置向导、健康检查、同步执行等功能
 
 用法:
     python scripts/cli.py setup      # 配置向导
     python scripts/cli.py check      # 健康检查
     python scripts/cli.py sync       # 执行同步
-    python scripts/cli.py example    # 运行示例
+    python scripts/cli.py restore    # 还原备份
+    python scripts/cli.py clean      # 清理备份
 """
 
 import os
@@ -245,9 +245,46 @@ def cmd_sync(args):
         cmd.append("--force")
     if args.debug:
         cmd.append("--debug-dump")
-    if args.task:
-        cmd.extend(["--task", args.task])
+    if args.path:
+        cmd.append(args.path)
+        if args.token:
+            cmd.append(args.token)
     
+    return subprocess.call(cmd)
+
+
+# ============================================================
+# 命令: restore - 还原备份
+# ============================================================
+def cmd_restore(args):
+    """还原备份"""
+    import subprocess
+    
+    path = args.path or prompt("要还原的文件/文件夹路径")
+    
+    if not os.path.exists(path):
+        fail(f"路径不存在: {path}")
+        return 1
+    
+    cmd = [sys.executable, "main.py", "--restore", path]
+    return subprocess.call(cmd)
+
+
+# ============================================================
+# 命令: clean - 清理备份
+# ============================================================
+def cmd_clean(args):
+    """清理备份文件"""
+    import subprocess
+    
+    print_logo()
+    print("🧹 清理备份文件\n")
+    
+    if not confirm("确认删除所有 .bak.* 备份文件？", default=False):
+        print("已取消")
+        return 0
+    
+    cmd = [sys.executable, "main.py", "--clean"]
     return subprocess.call(cmd)
 
 
@@ -285,7 +322,9 @@ def main():
   %(prog)s check              健康检查  
   %(prog)s sync               执行同步
   %(prog)s sync --force       强制覆盖
-  %(prog)s example TOKEN      运行示例
+  %(prog)s sync path token    同步指定文件
+  %(prog)s restore path       还原备份
+  %(prog)s clean              清理备份
 """
     )
     
@@ -301,15 +340,20 @@ def main():
     
     # sync
     sync_parser = subparsers.add_parser("sync", help="执行同步")
+    sync_parser.add_argument("path", nargs="?", help="本地路径")
+    sync_parser.add_argument("token", nargs="?", help="云端 Token")
     sync_parser.add_argument("--force", "-f", action="store_true", help="强制覆盖")
     sync_parser.add_argument("--debug", "-d", action="store_true", help="调试模式")
-    sync_parser.add_argument("--task", "-t", help="指定任务名称")
     sync_parser.set_defaults(func=cmd_sync)
     
-    # example
-    example_parser = subparsers.add_parser("example", help="运行示例")
-    example_parser.add_argument("token", nargs="?", help="目标云端 Token")
-    example_parser.set_defaults(func=cmd_example)
+    # restore
+    restore_parser = subparsers.add_parser("restore", help="还原备份")
+    restore_parser.add_argument("path", nargs="?", help="要还原的路径")
+    restore_parser.set_defaults(func=cmd_restore)
+    
+    # clean
+    clean_parser = subparsers.add_parser("clean", help="清理备份")
+    clean_parser.set_defaults(func=cmd_clean)
     
     args = parser.parse_args()
     

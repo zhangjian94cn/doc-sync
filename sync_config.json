@@ -1,37 +1,27 @@
 {
   "_readme": "配置文件说明：本文件用于配置飞书同步参数。带 _desc 后缀的字段为说明注释，请勿删除。",
-  
   "feishu_app_id_desc": "飞书开放平台应用的 App ID (以 cli_ 开头)",
   "feishu_app_id": "cli_a9d1298e7fb9dcca",
-  
   "feishu_app_secret_desc": "飞书开放平台应用的 App Secret",
   "feishu_app_secret": "NHll95eOQqoztUIo6TNcMbRzNfzZaPAk",
-  
   "feishu_user_access_token_desc": "[自动管理] 用户的 Access Token，用于访问文档和云空间 (程序自动刷新，勿动)",
-  "feishu_user_access_token": "u-eL0IPv7fF4lpoVfdOgifoChh0Fkgl4WNo20GiNq023AD",
-  
+  "feishu_user_access_token": "u-f0BmcP7l1dGUDSob06tIBuhh2bsgl4gjWi0G6wq022QT",
   "feishu_user_refresh_token_desc": "[自动管理] 用于刷新 Access Token 的 Refresh Token (程序自动刷新，勿动)",
-  "feishu_user_refresh_token": "ur-fO0rRWivB2C8Fy4MatXgH7hh21sgl4OjOy0G2wq026Bz",
-  
+  "feishu_user_refresh_token": "ur-dIuzwavGBeOH2QIWTnz.Cwhh03ugl4oVO20Gnxa023wz",
   "feishu_assets_token_desc": "指定存放图片/附件的飞书文件夹 Token。若留空，程序会自动在根目录创建 'DocSync_Assets'",
   "feishu_assets_token": "XlvUfnlYxlcPlTdihxJc72h5nhb",
-  
   "tasks_desc": "同步任务列表配置",
   "tasks": [
     {
       "note": "任务备注：CMCC Obsidian Notes",
       "local_desc": "本地文件或文件夹的绝对路径",
       "local": "/Users/zjah/obsidian/obsidian/1.cmcc",
-      
       "cloud_desc": "飞书目标位置的 Token (文件夹Token 或 文档Token)",
       "cloud": "Qw7YfVmf1ldtAAdN3koc8nTXnje",
-      
       "vault_root_desc": "Obsidian 仓库根目录，用于解析 Markdown 中的绝对路径图片引用 (如 ![[image.png]])",
       "vault_root": "/Users/zjah/obsidian/obsidian",
-      
       "enabled_desc": "是否启用此任务 (true/false)",
       "enabled": true,
-      
       "force_desc": "是否强制覆盖云端 (true: 忽略时间戳对比; false: 仅当本地更新时上传)",
       "force": false
     }
