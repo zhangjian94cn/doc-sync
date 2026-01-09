@@ -88,4 +88,4 @@ class TestSyncV2(unittest.TestCase):
         self.assertEqual(tasks[0]["doc_token"], "token_kept")
         
         # 2. deleted should be deleted from cloud
-        client.delete_file.assert_called_once_with("token_deleted")
+        client.delete_file.assert_called_once_with("token_deleted", file_type="docx")

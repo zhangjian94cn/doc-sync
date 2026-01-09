@@ -1,0 +1,19 @@
+{
+    "feishu": {
+        "app_id": "YOUR_APP_ID",
+        "app_secret": "YOUR_APP_SECRET",
+        "user_access_token": "YOUR_USER_ACCESS_TOKEN"
+    },
+    "sync_tasks": [
+        {
+            "local_path": "Obsidian/MainVault/DailyNotes",
+            "cloud_token": "Cxxxxxxxxxxxxxxxxx",
+            "vault_root": "Obsidian/MainVault"
+        }
+    ],
+    "settings": {
+        "concurrent_tasks": 3,
+        "api_rate_limit": 5,
+        "retry_max_attempts": 3
+    }
+}

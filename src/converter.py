@@ -16,7 +16,7 @@ class MarkdownToFeishu:
             image_uploader: Optional callback function to resolve/upload images.
                            Takes a path string, returns the resolved path or None.
         """
-        self.md = MarkdownIt()
+        self.md = MarkdownIt().enable('table')  # Enable table parsing
         self.image_uploader = image_uploader
         self.list_depth = 0
         
@@ -68,9 +68,97 @@ class MarkdownToFeishu:
             2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
             6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
             10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
-            14: "code", 15: "quote", 22: "todo",
+            14: "code", 15: "quote", 17: "todo",  # Feishu Todo is type 17
         }
         return mapping.get(block_type, "text")
+
+    def _check_checkbox(self, block_content: Dict[str, Any]) -> tuple:
+        """
+        Check if the block content starts with a checkbox pattern.
+        Returns: (is_checkbox, is_done, cleaned_content)
+        """
+        if not block_content or "elements" not in block_content:
+            return False, False, block_content
+        
+        elements = block_content.get("elements", [])
+        if not elements:
+            return False, False, block_content
+        
+        first_elem = elements[0]
+        if "text_run" not in first_elem:
+            return False, False, block_content
+        
+        content = first_elem["text_run"].get("content", "")
+        
+        # Check for [ ] or [x] or [X] at the start
+        match = re.match(r'^\[([ xX])\]\s*', content)
+        if not match:
+            return False, False, block_content
+        
+        is_done = match.group(1).lower() == 'x'
+        cleaned_text = content[match.end():]
+        
+        cleaned_elements = []
+        if cleaned_text:
+            new_first = dict(first_elem)
+            new_first["text_run"] = dict(first_elem["text_run"])
+            new_first["text_run"]["content"] = cleaned_text
+            cleaned_elements.append(new_first)
+        cleaned_elements.extend(elements[1:])
+        
+        cleaned_content = {"elements": cleaned_elements if cleaned_elements else [{"text_run": {"content": ""}}]}
+        return True, is_done, cleaned_content
+
+    def _create_table_block(self, table_rows: List[Dict]) -> Optional[Dict[str, Any]]:
+        """Convert parsed table rows to a native Feishu Table block (type 31).
+        
+        Structure:
+        - Table (31) with property (row_size, column_size)
+        - Children are TableCell (32) blocks  
+        - Each TableCell contains Text (2) blocks
+        
+        Note: This structure requires the descendants API for creation.
+        """
+        if not table_rows:
+            return None
+        
+        row_size = len(table_rows)
+        col_size = max(len(row['cells']) for row in table_rows) if table_rows else 0
+        if col_size == 0:
+            return None
+
+        # Build cell blocks with nested text
+        cell_blocks = []
+        for row in table_rows:
+            cells = row['cells']
+            while len(cells) < col_size:
+                cells.append({"elements": [{"text_run": {"content": ""}}]})
+            
+            for cell_content in cells:
+                text_block = {
+                    "block_type": 2,
+                    "text": {
+                        "elements": cell_content.get("elements", [{"text_run": {"content": ""}}])
+                    }
+                }
+                cell_block = {
+                    "block_type": 32,
+                    "table_cell": {},
+                    "children": [text_block]
+                }
+                cell_blocks.append(cell_block)
+        
+        return {
+            "block_type": 31,
+            "table": {
+                "property": {
+                    "row_size": row_size,
+                    "column_size": col_size
+                }
+            },
+            "children": cell_blocks,
+            "_is_native_table": True  # Flag for sync to use descendants API
+        }
 
     def _extract_frontmatter(self, text: str) -> tuple[str, Optional[Dict[str, str]]]:
         """Extract YAML front matter from text."""
@@ -139,10 +227,60 @@ class MarkdownToFeishu:
         last_block_stack = [None] 
         self.list_depth = 0
         
+        # Table parsing state
+        in_table = False
+        table_rows = []
+        current_row = []
+        is_header_row = False
+        
         i = 0
         while i < len(tokens):
             token = tokens[i]
             block = None
+            
+            # Handle table tokens first
+            if token.type == 'table_open':
+                in_table = True
+                table_rows = []
+                i += 1
+                continue
+            elif token.type == 'table_close':
+                in_table = False
+                block = self._create_table_block(table_rows)
+                table_rows = []
+                if block:
+                    self._add_block_to_tree(block, root_blocks, parent_stack, last_block_stack)
+                i += 1
+                continue
+            elif token.type in ('thead_open', 'tbody_open'):
+                is_header_row = token.type == 'thead_open'
+                i += 1
+                continue
+            elif token.type in ('thead_close', 'tbody_close'):
+                i += 1
+                continue
+            elif token.type == 'tr_open':
+                current_row = []
+                i += 1
+                continue
+            elif token.type == 'tr_close':
+                if current_row:
+                    table_rows.append({'cells': current_row, 'is_header': is_header_row})
+                current_row = []
+                i += 1
+                continue
+            elif token.type in ('th_open', 'td_open'):
+                cell_elements = {"elements": [{"text_run": {"content": ""}}]}
+                if i + 1 < len(tokens) and tokens[i+1].type == 'inline':
+                    cell_elements = self._create_text_elements_from_token(tokens[i+1])
+                    i += 2
+                else:
+                    i += 1
+                current_row.append(cell_elements)
+                continue
+            elif token.type in ('th_close', 'td_close'):
+                i += 1
+                continue
             
             if token.type == 'heading_open':
                 level = int(token.tag[1:])
@@ -180,13 +318,31 @@ class MarkdownToFeishu:
                     }
                 elif list_type_stack:
                     list_type = list_type_stack[-1]
-                    block_type = 12 if list_type == 'bullet' else 13
-                    field_name = self._get_block_field_name(block_type)
                     block_content = self._create_text_elements_from_token(inline_token)
-                    block = {
-                        "block_type": block_type,
-                        field_name: block_content
-                    }
+                    
+                    # Check for checkbox pattern: [ ] or [x]
+                    is_checkbox, is_done, cleaned_content = self._check_checkbox(block_content)
+                    
+                    if is_checkbox:
+                        # Create Todo block (type 17)
+                        block = {
+                            "block_type": 17,
+                            "todo": {
+                                "elements": cleaned_content.get("elements", []),
+                                "style": {
+                                    "align": 1,
+                                    "done": is_done,
+                                    "folded": False
+                                }
+                            }
+                        }
+                    else:
+                        block_type = 12 if list_type == 'bullet' else 13
+                        field_name = self._get_block_field_name(block_type)
+                        block = {
+                            "block_type": block_type,
+                            field_name: block_content
+                        }
                 else:
                     generated_blocks = self._process_inline_content(inline_token)
                     for b in generated_blocks:

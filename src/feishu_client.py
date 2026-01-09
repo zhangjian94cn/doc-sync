@@ -1,6 +1,8 @@
 import json
 import os
 import hashlib
+import time
+import threading
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -15,6 +17,11 @@ from src.logger import logger
 from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 class FeishuClient:
+    # Rate limiting: max 5 requests per second (飞书 API 限制)
+    _rate_limit_interval = 0.2  # 200ms between requests
+    _last_request_time = 0
+    _rate_limit_lock = threading.Lock()
+    
     def __init__(self, app_id: str, app_secret: str, user_access_token: str = None):
         self.app_id = app_id
         self.app_secret = app_secret
@@ -28,6 +35,15 @@ class FeishuClient:
         
         self.asset_cache_path = os.path.join(os.path.expanduser("~"), ".doc_sync", "assets_cache.json")
         self._asset_cache = self._load_asset_cache()
+    
+    def _rate_limit(self):
+        """Ensure minimum interval between API requests."""
+        with FeishuClient._rate_limit_lock:
+            now = time.time()
+            elapsed = now - FeishuClient._last_request_time
+            if elapsed < FeishuClient._rate_limit_interval:
+                time.sleep(FeishuClient._rate_limit_interval - elapsed)
+            FeishuClient._last_request_time = time.time()
 
     def _load_asset_cache(self) -> Dict[str, str]:
         if os.path.exists(self.asset_cache_path):
@@ -61,6 +77,7 @@ class FeishuClient:
         headers = {"Content-Type": "application/json; charset=utf-8"}
         data = {"app_id": self.app_id, "app_secret": self.app_secret}
         try:
+            self._rate_limit()  # Throttle requests
             resp = requests.post(url, headers=headers, json=data, timeout=10)
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 return resp.json().get("tenant_access_token")
@@ -290,6 +307,28 @@ class FeishuClient:
         self.client.docx.v1.document_block_children.batch_delete(request, self._get_request_option())
 
     def add_blocks(self, document_id: str, blocks: List[Dict[str, Any]], index: int = -1):
+        # Separate table blocks from regular blocks
+        # Tables with _is_native_table flag need special handling via descendants API
+        table_blocks = []
+        regular_blocks = []
+        
+        for b in blocks:
+            if b.get("block_type") == 31 and b.get("_is_native_table"):
+                table_blocks.append(b)
+            else:
+                regular_blocks.append(b)
+        
+        # Handle table blocks separately using create_table
+        current_index = index
+        for table_block in table_blocks:
+            self.create_table(document_id, table_block, current_index)
+            if current_index >= 0:
+                current_index += 1
+        
+        # Handle regular blocks with existing logic
+        if not regular_blocks:
+            return
+            
         def create_level(parent_id, current_blocks, insert_index=-1):
             batch_payload = []
             children_map = {} 
@@ -357,7 +396,7 @@ class FeishuClient:
                     parent_block_id = created_ids[idx]
                     create_level(parent_block_id, kids)
 
-        create_level(document_id, blocks, index)
+        create_level(document_id, regular_blocks, index)
 
     def _batch_create(self, document_id, parent_id, blocks_dict_list, index=-1) -> List[str]:
         # Use raw requests to bypass SDK limitations and control payload precisely
@@ -375,6 +414,9 @@ class FeishuClient:
         def clean_block(b):
             b_new = b.copy()
             b_type = b_new.get("block_type")
+            
+            # Remove children for all block types
+            # Note: Native Table (31) would need children, but we use code block for now
             b_new.pop("children", None)
             
             # Handle File Block (Type 23)
@@ -468,29 +510,262 @@ class FeishuClient:
             
             body = {"children": payload_children, "index": current_index}
 
-            try:
-                resp = requests.post(url, headers=headers, json=body)
-                if resp.status_code == 200:
-                    res_json = resp.json()
-                    if res_json.get("code") == 0:
-                        for child in res_json["data"]["children"]:
-                            created_ids.append(child["block_id"])
+            # Retry logic for rate limiting
+            max_retries = 3
+            retry_delay = 1.0  # Initial delay in seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    self._rate_limit()  # Throttle requests
+                    resp = requests.post(url, headers=headers, json=body)
+                    
+                    # Handle rate limiting (HTTP 429 or code 99991400)
+                    if resp.status_code == 429:
+                        if attempt < max_retries - 1:
+                            import time
+                            logger.warning(f"Rate limited (429), retrying in {retry_delay}s...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                            continue
+                        else:
+                            logger.error(f"Rate limited after {max_retries} retries")
+                            break
+                    
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+                        
+                        # Check for rate limit error code
+                        if res_json.get("code") == 99991400:
+                            if attempt < max_retries - 1:
+                                import time
+                                logger.warning(f"Rate limited (99991400), retrying in {retry_delay}s...")
+                                time.sleep(retry_delay)
+                                retry_delay *= 2
+                                continue
+                            else:
+                                logger.error(f"Rate limited after {max_retries} retries")
+                                break
+                        
+                        if res_json.get("code") == 0:
+                            for child in res_json["data"]["children"]:
+                                created_ids.append(child["block_id"])
+                            break  # Success, exit retry loop
+                        else:
+                            logger.error(f"Batch create failed (API Error):")
+                            logger.error(f"   - Code: {res_json.get('code')}")
+                            logger.error(f"   - Msg: {res_json.get('msg')}")
+                            break  # Non-retryable error
                     else:
-                        logger.error(f"Batch create failed (API Error):")
-                        logger.error(f"   - Code: {res_json.get('code')}")
-                        logger.error(f"   - Msg: {res_json.get('msg')}")
-                else:
-                    logger.error(f"Batch create failed (HTTP {resp.status_code}):")
-                    logger.error(f"   - Response: {resp.text}")
-                    # Debug: Print payload to identify invalid param
-                    logger.debug(f"   - Payload: {json.dumps(body, indent=2, ensure_ascii=False)}")
-            except Exception as e:
-                logger.error(f"Batch create exception: {e}")
+                        # Handle 400 errors that might contain rate limit
+                        try:
+                            res_json = resp.json()
+                            if res_json.get("code") == 99991400:
+                                if attempt < max_retries - 1:
+                                    import time
+                                    logger.warning(f"Rate limited, retrying in {retry_delay}s...")
+                                    time.sleep(retry_delay)
+                                    retry_delay *= 2
+                                    continue
+                        except:
+                            pass
+                        
+                        logger.error(f"Batch create failed (HTTP {resp.status_code}):")
+                        logger.error(f"   - Response: {resp.text}")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"Batch create exception: {e}")
+                    break
+                    
         return created_ids
+
+    def _create_descendants(self, document_id: str, parent_id: str, 
+                           top_block_ids: List[str], descendants: List[Dict], 
+                           index: int = 0) -> bool:
+        """Create nested block structures (like tables) using descendants API.
+        
+        Args:
+            document_id: The document ID
+            parent_id: The parent block ID (usually document_id for root)
+            top_block_ids: IDs of top-level blocks to add as children
+            descendants: Flat list of all blocks with their relationships
+            index: Insert position
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        from lark_oapi.api.docx.v1 import (
+            CreateDocumentBlockDescendantRequest, 
+            CreateDocumentBlockDescendantRequestBody,
+            Block, Table, TableProperty, TableCell, Text, TextElement, TextRun
+        )
+        
+        self._rate_limit()
+        
+        try:
+            # Build Block objects from dicts
+            block_objs = []
+            for d in descendants:
+                block_builder = Block.builder().block_id(d.get("block_id", ""))
+                
+                b_type = d.get("block_type")
+                block_builder.block_type(b_type)
+                
+                # Set children IDs
+                children_ids = d.get("children", [])
+                if isinstance(children_ids, list):
+                    block_builder.children(children_ids)
+                
+                # Set content based on block type
+                if b_type == 31:  # Table
+                    table_data = d.get("table", {})
+                    prop = table_data.get("property", {})
+                    table_builder = Table.builder().property(
+                        TableProperty.builder()
+                            .row_size(prop.get("row_size", 1))
+                            .column_size(prop.get("column_size", 1))
+                            .build()
+                    )
+                    block_builder.table(table_builder.build())
+                    
+                elif b_type == 32:  # TableCell
+                    block_builder.table_cell(TableCell.builder().build())
+                    
+                elif b_type == 2:  # Text
+                    text_data = d.get("text", {})
+                    elements = text_data.get("elements", [])
+                    text_elements = []
+                    for el in elements:
+                        if "text_run" in el:
+                            tr = el["text_run"]
+                            text_elements.append(
+                                TextElement.builder()
+                                    .text_run(TextRun.builder()
+                                        .content(tr.get("content", ""))
+                                        .build())
+                                    .build()
+                            )
+                    if text_elements:
+                        block_builder.text(Text.builder().elements(text_elements).build())
+                
+                block_objs.append(block_builder.build())
+            
+            # Build request
+            request = CreateDocumentBlockDescendantRequest.builder() \
+                .document_id(document_id) \
+                .block_id(parent_id) \
+                .document_revision_id(-1) \
+                .request_body(CreateDocumentBlockDescendantRequestBody.builder()
+                    .children_id(top_block_ids)
+                    .index(index)
+                    .descendants(block_objs)
+                    .build()) \
+                .build()
+            
+            # Make request with user token
+            option = lark.RequestOption.builder()
+            if self.user_access_token:
+                option.user_access_token(self.user_access_token)
+            
+            response = self.client.docx.v1.document_block_descendant.create(request, option.build())
+            
+            if response.success():
+                logger.success(f"Created descendants successfully")
+                return True
+            else:
+                logger.error(f"Create descendants failed: code={response.code}, msg={response.msg}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Create descendants exception: {e}")
+            return False
+
+    def create_table(self, document_id: str, table_block: Dict, index: int = -1) -> bool:
+        """Create a native table using descendants API.
+        
+        Args:
+            document_id: The document ID
+            table_block: Table block dict with nested structure from converter
+            index: Insert position (-1 for end)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        import uuid
+        
+        # Generate unique IDs for blocks
+        table_id = f"table_{uuid.uuid4().hex[:8]}"
+        
+        table_data = table_block.get("table", {})
+        prop = table_data.get("property", {})
+        row_size = prop.get("row_size", 1)
+        col_size = prop.get("column_size", 1)
+        
+        children = table_block.get("children", [])
+        
+        # Build descendants list
+        descendants = []
+        cell_ids = []
+        
+        # Add table block
+        table_desc = {
+            "block_id": table_id,
+            "block_type": 31,
+            "children": [],  # Will fill with cell IDs
+            "table": {
+                "property": {
+                    "row_size": row_size,
+                    "column_size": col_size
+                }
+            }
+        }
+        
+        # Process each cell
+        for i, cell in enumerate(children):
+            cell_id = f"cell_{uuid.uuid4().hex[:8]}"
+            cell_ids.append(cell_id)
+            
+            # Get text content from cell's children
+            cell_children = cell.get("children", [])
+            text_child_ids = []
+            
+            for j, text_block in enumerate(cell_children):
+                text_id = f"text_{uuid.uuid4().hex[:8]}"
+                text_child_ids.append(text_id)
+                
+                # Add text block to descendants
+                descendants.append({
+                    "block_id": text_id,
+                    "block_type": 2,
+                    "children": [],
+                    "text": text_block.get("text", {"elements": [{"text_run": {"content": ""}}]})
+                })
+            
+            # Add cell block to descendants
+            descendants.append({
+                "block_id": cell_id,
+                "block_type": 32,
+                "children": text_child_ids
+            })
+        
+        # Update table with cell IDs
+        table_desc["children"] = cell_ids
+        
+        # Add table at the beginning (it's the top-level block)
+        descendants.insert(0, table_desc)
+        
+        # Create using descendants API
+        return self._create_descendants(
+            document_id, 
+            document_id,  # parent_id = document_id for root level
+            [table_id],   # top-level block IDs
+            descendants,
+            index if index >= 0 else 0
+        )
 
     def _get_content_key(self, b_type):
         mapping = {
-            2: "text", 12: "bullet", 13: "ordered", 22: "todo", 14: "code",
+            2: "text", 12: "bullet", 13: "ordered", 17: "todo", 14: "code",
             3: "heading1", 4: "heading2", 5: "heading3", 6: "heading4",
             7: "heading5", 8: "heading6", 9: "heading7", 10: "heading8", 11: "heading9"
         }
@@ -515,7 +790,7 @@ class FeishuClient:
         elif bt == 12: builder.bullet(self._build_text_obj(b.get("bullet")))
         elif bt == 13: builder.ordered(self._build_text_obj(b.get("ordered")))
         elif bt == 14: builder.code(self._build_text_obj(b.get("code")))
-        elif bt == 22: builder.todo(self._build_text_obj(b.get("todo")))
+        elif bt == 17: builder.todo(self._build_text_obj(b.get("todo")))  # Todo is type 17
         elif bt == 27: builder.image(Image.builder().token(b.get("image", {}).get("token")).build())
         elif bt == 23:
             f_data = b.get("file", {})
