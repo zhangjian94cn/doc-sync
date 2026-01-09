@@ -7,17 +7,27 @@ let config = {
     tasks: []
 };
 let ui = {};
+let currentTaskIndex = -1; // -1 for adding new
 
-// DOM Elements
+// --- DOM Elements ---
 const logOutput = document.getElementById('log-output');
 const tasksList = document.getElementById('tasks-list');
-const taskTemplate = document.getElementById('task-template');
-const pageTitle = document.getElementById('page-title');
 const startSyncBtn = document.getElementById('start-sync-btn');
 const appStatus = document.getElementById('app-status');
 const lastSyncTime = document.getElementById('last-sync-time');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const forceSyncCheckbox = document.getElementById('force-sync-checkbox');
+const pageTitle = document.getElementById('page-title');
+
+// Modal Elements
+const taskModal = document.getElementById('task-modal');
+const modalTitle = document.getElementById('modal-title');
+const modalNote = document.getElementById('modal-task-note');
+const modalLocal = document.getElementById('modal-task-local');
+const modalCloud = document.getElementById('modal-task-cloud');
+const modalVault = document.getElementById('modal-task-vault');
+const modalEnabled = document.getElementById('modal-task-enabled');
+const modalForce = document.getElementById('modal-task-force');
 
 // --- I18n ---
 const i18n = {
@@ -30,7 +40,7 @@ const i18n = {
         appearance: 'Appearance',
         syncNow: 'Sync Now',
         syncing: 'Syncing...',
-        ready: 'Ready to sync...',
+        ready: 'Ready to sync',
         error: 'Error',
         lastSynced: 'Last synced',
         never: 'Never',
@@ -38,6 +48,7 @@ const i18n = {
         clearLogs: 'Clear Logs',
         manageSyncPaths: 'Manage your synchronization paths',
         addTask: 'Add Task',
+        editTask: 'Edit Task',
         saveCredentials: 'Save Credentials',
         savePreferences: 'Save Preferences',
         general: 'General',
@@ -58,9 +69,9 @@ const i18n = {
         appId: 'App ID',
         appSecret: 'App Secret',
         appDesc: 'Obsidian → Feishu document sync tool',
-        deleteConfirm: 'Delete this task?',
+        deleteConfirm: 'Are you sure you want to delete this task?',
         plsFillIdSecret: 'Please fill in App ID and App Secret',
-        saved: 'Saved!',
+        saved: 'Saved successfully',
         syncCompleted: 'Sync completed!',
         syncFailed: 'Sync failed',
         initializing: 'Initializing...',
@@ -70,10 +81,10 @@ const i18n = {
         folderTokenPlaceholder: 'Folder Token',
         vaultRootPlaceholder: 'Vault Root (optional)',
         browse: '📂',
-        localPath: 'Local',
-        cloudFolder: 'Cloud',
-        vaultRoot: 'Vault',
-        forceUpload: 'Force',
+        localPath: 'Local Path',
+        cloudFolder: 'Cloud Token',
+        vaultRoot: 'Vault Root',
+        forceUpload: 'Force Upload',
         forceSync: 'Force Sync (overwrite cloud)',
         healthCheck: 'Health Check',
         healthCheckDesc: 'Check environment and configuration',
@@ -87,12 +98,15 @@ const i18n = {
         cleaned: 'Backups cleaned!',
         checking: 'Checking...',
         checkPassed: '✅ All checks passed',
-        checkFailed: '❌ Some checks failed'
+        checkFailed: '❌ Some checks failed',
+        toastSaved: 'Configurations saved',
+        toastDeleted: 'Task deleted',
+        toastError: 'Operation failed'
     },
     zh: {
         brand: 'DocSync',
         dashboard: '仪表盘',
-        tasks: '任务',
+        tasks: '任务管理',
         settings: '设置',
         tools: '工具',
         appearance: '外观',
@@ -104,8 +118,9 @@ const i18n = {
         never: '从未',
         activityLog: '活动日志',
         clearLogs: '清空日志',
-        manageSyncPaths: '管理同步路径',
+        manageSyncPaths: '管理同步任务配置',
         addTask: '添加任务',
+        editTask: '编辑任务',
         saveCredentials: '保存凭据',
         savePreferences: '保存偏好',
         general: '通用',
@@ -126,9 +141,9 @@ const i18n = {
         appId: 'App ID',
         appSecret: 'App Secret',
         appDesc: 'Obsidian → 飞书文档同步工具',
-        deleteConfirm: '确定删除此任务？',
+        deleteConfirm: '确定要删除此任务吗？',
         plsFillIdSecret: '请填写 App ID 和 App Secret',
-        saved: '已保存！',
+        saved: '保存成功',
         syncCompleted: '同步成功！',
         syncFailed: '同步失败',
         initializing: '正在初始化...',
@@ -138,10 +153,10 @@ const i18n = {
         folderTokenPlaceholder: '云文件夹 Token',
         vaultRootPlaceholder: 'Vault 根目录（可选）',
         browse: '📂',
-        localPath: '本地',
-        cloudFolder: '云端',
-        vaultRoot: 'Vault',
-        forceUpload: '强制',
+        localPath: '本地路径',
+        cloudFolder: '云端 Token',
+        vaultRoot: 'Vault 根目录',
+        forceUpload: '强制上传',
         forceSync: '强制同步（覆盖云端）',
         healthCheck: '健康检查',
         healthCheckDesc: '检查环境和配置',
@@ -155,7 +170,10 @@ const i18n = {
         cleaned: '备份已清理！',
         checking: '检查中...',
         checkPassed: '✅ 所有检查通过',
-        checkFailed: '❌ 部分检查失败'
+        checkFailed: '❌ 部分检查失败',
+        toastSaved: '配置已保存',
+        toastDeleted: '任务已删除',
+        toastError: '操作失败'
     }
 };
 
@@ -177,6 +195,28 @@ function applyTranslations() {
     if (pageTitle && pageTitle.dataset.key) {
         pageTitle.textContent = t(pageTitle.dataset.key);
     }
+}
+
+// --- Utils: Toast ---
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    // Icon based on type
+    const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+
+    toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => toast.classList.add('show'));
+
+    // Animate out
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // --- Theme & Accent ---
@@ -243,12 +283,7 @@ async function saveUI() {
     initTheme();
     setAccent(ui.accent);
 
-    const btn = document.getElementById('save-appearance-btn');
-    if (btn) {
-        const ot = btn.textContent;
-        btn.textContent = t('saved');
-        setTimeout(() => btn.textContent = ot, 1500);
-    }
+    showToast(t('saved'));
 }
 
 // --- Init ---
@@ -266,9 +301,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Tools page
+    // Tools page bindings
     document.getElementById('run-health-check-btn')?.addEventListener('click', runHealthCheck);
     document.getElementById('clean-backups-btn')?.addEventListener('click', cleanBackups);
+
+    // Modal bindings
+    document.getElementById('modal-close').addEventListener('click', hideModal);
+    document.getElementById('modal-cancel').addEventListener('click', hideModal);
+    document.getElementById('modal-save').addEventListener('click', saveTaskFromModal);
+
+    // Modal Browse
+    document.getElementById('modal-browse-local').addEventListener('click', async () => {
+        const path = await ipcRenderer.invoke('select-folder');
+        if (path) {
+            modalLocal.value = path;
+            // Auto fill vault root if empty
+            if (!modalVault.value) modalVault.value = path;
+        }
+    });
+
+    document.getElementById('modal-browse-vault').addEventListener('click', async () => {
+        const path = await ipcRenderer.invoke('select-folder');
+        if (path) modalVault.value = path;
+    });
 
     await init();
 
@@ -328,6 +383,11 @@ startSyncBtn.addEventListener('click', () => {
 
     startSyncBtn.classList.add('syncing');
     startSyncBtn.querySelector('span').textContent = t('syncing');
+
+    // Spinner
+    const iconBox = startSyncBtn.querySelector('.icon-box');
+    iconBox.innerHTML = '<div class="spinner"></div>';
+
     appStatus.textContent = t('syncing');
     appStatus.style.color = 'var(--accent-color)';
 
@@ -349,15 +409,24 @@ ipcRenderer.on('sync-finished', (event, success) => {
     startSyncBtn.classList.remove('syncing');
     startSyncBtn.querySelector('span').textContent = t('syncNow');
 
+    // Restore icon
+    startSyncBtn.querySelector('.icon-box').innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+        </svg>
+    `;
+
     if (success) {
         log('\n✅ ' + t('syncCompleted'));
         appStatus.textContent = t('ready');
         appStatus.style.color = 'var(--text-secondary)';
         lastSyncTime.textContent = new Date().toLocaleTimeString();
+        showToast(t('syncCompleted'), 'success');
     } else {
         log('\n❌ ' + t('syncFailed'));
         appStatus.textContent = t('error');
         appStatus.style.color = 'var(--danger-color)';
+        showToast(t('syncFailed'), 'error');
     }
 });
 
@@ -367,7 +436,7 @@ document.getElementById('save-env-btn').addEventListener('click', async () => {
     const appSecret = document.getElementById('app-secret').value.trim();
 
     if (!appId || !appSecret) {
-        alert(t('plsFillIdSecret'));
+        showToast(t('plsFillIdSecret'), 'error');
         return;
     }
 
@@ -376,17 +445,28 @@ document.getElementById('save-env-btn').addEventListener('click', async () => {
         feishu_app_secret: appSecret
     });
 
-    const btn = document.getElementById('save-env-btn');
-    const originalText = btn.textContent;
-    btn.textContent = t('saved');
-    btn.style.backgroundColor = 'var(--accent-color)';
-    setTimeout(() => {
-        btn.textContent = originalText;
-        btn.style.backgroundColor = '';
-    }, 2000);
+    showToast(t('saved'));
 });
 
-// --- Tools: Health Check ---
+document.getElementById('toggle-secret-btn')?.addEventListener('click', () => {
+    const input = document.getElementById('app-secret');
+    const type = input.type === 'password' ? 'text' : 'password';
+    input.type = type;
+
+    const btn = document.getElementById('toggle-secret-btn');
+    const eyeOpen = btn.querySelectorAll('.eye-open');
+    const eyeClosed = btn.querySelectorAll('.eye-closed');
+
+    if (type === 'text') {
+        eyeOpen.forEach(el => el.style.display = 'none');
+        eyeClosed.forEach(el => el.style.display = 'block');
+    } else {
+        eyeOpen.forEach(el => el.style.display = 'block');
+        eyeClosed.forEach(el => el.style.display = 'none');
+    }
+});
+
+// --- Tools ---
 async function runHealthCheck() {
     const btn = document.getElementById('run-health-check-btn');
     const resultDiv = document.getElementById('health-check-result');
@@ -397,7 +477,6 @@ async function runHealthCheck() {
 
     try {
         const result = await ipcRenderer.invoke('health-check');
-
         if (result.success) {
             resultDiv.innerHTML = `<div class="check-success">${t('checkPassed')}</div>`;
         } else {
@@ -411,10 +490,7 @@ async function runHealthCheck() {
     btn.disabled = false;
 }
 
-// --- Tools: Clean Backups ---
 async function cleanBackups() {
-    if (!confirm(t('cleanConfirm'))) return;
-
     const btn = document.getElementById('clean-backups-btn');
     btn.textContent = t('cleaning');
     btn.disabled = true;
@@ -426,96 +502,126 @@ ipcRenderer.on('clean-finished', (event, success) => {
     const btn = document.getElementById('clean-backups-btn');
     btn.textContent = success ? t('cleaned') : t('error');
     btn.disabled = false;
+    showToast(success ? t('cleaned') : t('error'), success ? 'success' : 'error');
     setTimeout(() => {
         btn.textContent = t('cleanBackups');
     }, 2000);
 });
 
-// --- Task Management ---
-document.getElementById('add-task-btn').addEventListener('click', () => {
-    if (!config.tasks) config.tasks = [];
-    config.tasks.push({
-        note: t('taskNamePlaceholder'),
-        local: '',
-        cloud: '',
-        vault_root: '',
-        enabled: true,
-        force: false
-    });
-    renderTasks();
+// --- Task Management (Refactored) ---
 
-    if (!document.getElementById('tasks').classList.contains('active')) {
-        document.querySelector('[data-tab="tasks"]').click();
-    }
+// Add Task Button
+document.getElementById('add-task-btn').addEventListener('click', () => {
+    showModal(-1);
 });
+
+function showModal(index) {
+    currentTaskIndex = index;
+    const isEdit = index >= 0;
+
+    modalTitle.textContent = isEdit ? t('editTask') : t('addTask');
+
+    if (isEdit) {
+        const task = config.tasks[index];
+        modalNote.value = task.note || '';
+        modalLocal.value = task.local || '';
+        modalCloud.value = task.cloud || '';
+        modalVault.value = task.vault_root || '';
+        modalEnabled.checked = task.enabled !== false;
+        modalForce.checked = task.force === true;
+    } else {
+        // Clear for new
+        modalNote.value = '';
+        modalLocal.value = '';
+        modalCloud.value = '';
+        modalVault.value = '';
+        modalEnabled.checked = true;
+        modalForce.checked = false;
+    }
+
+    taskModal.classList.add('active');
+}
+
+function hideModal() {
+    taskModal.classList.remove('active');
+}
+
+async function saveTaskFromModal() {
+    const newTask = {
+        note: modalNote.value.trim(),
+        local: modalLocal.value.trim(),
+        cloud: modalCloud.value.trim(),
+        vault_root: modalVault.value.trim(),
+        enabled: modalEnabled.checked,
+        force: modalForce.checked
+    };
+
+    // Validation
+    if (!newTask.note || !newTask.local || !newTask.cloud) {
+        showToast('Please fill in required fields', 'error');
+        return;
+    }
+
+    if (!config.tasks) config.tasks = [];
+
+    if (currentTaskIndex >= 0) {
+        config.tasks[currentTaskIndex] = newTask;
+    } else {
+        config.tasks.push(newTask);
+    }
+
+    await ipcRenderer.invoke('save-config', { tasks: config.tasks });
+
+    hideModal();
+    renderTasks();
+    showToast(t('saved'));
+}
+
+async function deleteTask(index) {
+    // Custom dialog or confirm
+    if (confirm(t('deleteConfirm'))) {
+        config.tasks.splice(index, 1);
+        await ipcRenderer.invoke('save-config', { tasks: config.tasks });
+        renderTasks();
+        showToast(t('toastDeleted'));
+    }
+}
 
 function renderTasks() {
     tasksList.innerHTML = '';
-    (config.tasks || []).forEach((task, index) => {
-        const clone = taskTemplate.content.cloneNode(true);
-        const el = clone.querySelector('.task-card');
+    tasksList.className = 'tasks-list-container'; // Changed from grid
 
-        const noteInput = el.querySelector('.task-note-input');
-        const localInput = el.querySelector('.task-local');
-        const cloudInput = el.querySelector('.task-cloud');
-        const vaultInput = el.querySelector('.task-vault');
-        const enabledCheck = el.querySelector('.task-enabled');
-        const forceCheck = el.querySelector('.task-force');
+    if (!config.tasks || config.tasks.length === 0) {
+        tasksList.innerHTML = `<div class="empty-state">
+            <div style="font-size:40px;margin-bottom:10px">📝</div>
+            <p>${t('i18n') ? t('addTask') : 'No tasks yet. Add one to start syncing!'}</p>
+        </div>`;
+        return;
+    }
 
-        noteInput.value = task.note || '';
-        localInput.value = task.local || '';
-        cloudInput.value = task.cloud || '';
-        if (vaultInput) vaultInput.value = task.vault_root || '';
-        enabledCheck.checked = task.enabled !== false;
-        forceCheck.checked = task.force === true;
+    config.tasks.forEach((task, index) => {
+        const item = document.createElement('div');
+        item.className = `task-list-item ${task.enabled !== false ? 'enabled' : 'disabled'}`;
 
-        const saveTaskState = async () => {
-            task.note = noteInput.value;
-            task.local = localInput.value;
-            task.cloud = cloudInput.value;
-            task.vault_root = vaultInput?.value || '';
-            task.enabled = enabledCheck.checked;
-            task.force = forceCheck.checked;
-            await ipcRenderer.invoke('save-config', { tasks: config.tasks });
-        };
+        item.innerHTML = `
+            <div class="task-info">
+                <div class="task-title">${task.note || 'Untitled Task'}</div>
+                <div class="task-detail">
+                    <span>📂 ${task.local || '...'}</span>
+                    <span style="opacity:0.5">➜</span>
+                    <span>☁️ ${task.cloud ? task.cloud.substring(0, 8) + '...' : '...'}</span>
+                </div>
+            </div>
+            <div class="task-actions-group">
+                <button class="icon-btn edit-btn" title="${t('editTask')}">✎</button>
+                <button class="icon-btn delete-btn" title="${t('removeTask')}" style="color:var(--danger-color)">🗑</button>
+            </div>
+        `;
 
-        [noteInput, cloudInput, vaultInput, enabledCheck, forceCheck].forEach(input => {
-            if (input) input.addEventListener('change', saveTaskState);
-        });
+        // Bind events
+        item.querySelector('.edit-btn').addEventListener('click', () => showModal(index));
+        item.querySelector('.delete-btn').addEventListener('click', () => deleteTask(index));
 
-        el.querySelector('.delete-task-btn').addEventListener('click', async () => {
-            if (confirm(t('deleteConfirm'))) {
-                config.tasks.splice(index, 1);
-                await ipcRenderer.invoke('save-config', { tasks: config.tasks });
-                renderTasks();
-            }
-        });
-
-        // Browse for local path
-        el.querySelector('.browse-btn').addEventListener('click', async () => {
-            const path = await ipcRenderer.invoke('select-folder');
-            if (path) {
-                localInput.value = path;
-                // Auto-fill vault_root if empty
-                if (vaultInput && !vaultInput.value) {
-                    vaultInput.value = path;
-                }
-                saveTaskState();
-            }
-        });
-
-        // Browse for vault root
-        const browseVaultBtn = el.querySelector('.browse-vault-btn');
-        if (browseVaultBtn) {
-            browseVaultBtn.addEventListener('click', async () => {
-                const path = await ipcRenderer.invoke('select-folder');
-                if (path && vaultInput) {
-                    vaultInput.value = path;
-                    saveTaskState();
-                }
-            });
-        }
-
-        tasksList.appendChild(el);
+        tasksList.appendChild(item);
     });
 }

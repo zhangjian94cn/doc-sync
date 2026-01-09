@@ -3,13 +3,22 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// Set app name
+app.name = 'DocSync';
+
 let mainWindow;
 
 function createWindow() {
+  // Choose icon format based on platform
+  const iconName = process.platform === 'darwin' ? 'icon.icns' :
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+
   mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
+    title: 'DocSync',
     titleBarStyle: 'hiddenInset',
+    icon: path.join(__dirname, 'build-assets', iconName),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -22,7 +31,13 @@ function createWindow() {
   // mainWindow.webContents.openDevTools(); // Uncomment for debugging
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Set dock icon on macOS
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(path.join(__dirname, 'build-assets/icon.png'));
+  }
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

@@ -136,7 +136,23 @@
                             </div>
                             <div class="input-group">
                                 <label data-i18n="appSecret">App Secret</label>
-                                <input type="password" id="app-secret" placeholder="••••••••••••••••">
+                                <div class="password-wrapper">
+                                    <input type="password" id="app-secret" placeholder="••••••••••••••••"
+                                        style="padding-right: 30px;">
+                                    <button id="toggle-secret-btn" class="password-toggle" title="Show/Hide">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            width="16" height="16">
+                                            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z">
+                                            </path>
+                                            <circle class="eye-open" cx="12" cy="12" r="3"></circle>
+                                            <path class="eye-closed"
+                                                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                                                style="display:none"></path>
+                                            <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display:none">
+                                            </line>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="card-footer">
@@ -310,6 +326,61 @@
             </div>
         </div>
     </template>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Task Edit Modal -->
+    <div id="task-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Edit Task</h3>
+                <button class="icon-btn" id="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="field-row">
+                    <span class="field-label" data-i18n="taskNamePlaceholder">Task Name</span>
+                    <input type="text" id="modal-task-note" placeholder="My Notes">
+                </div>
+
+                <div class="field-row">
+                    <span class="field-label" data-i18n="localPath">Local Path</span>
+                    <div class="input-with-btn">
+                        <input type="text" id="modal-task-local" placeholder="/path/to/folder" readonly>
+                        <button class="browse-btn" id="modal-browse-local" data-i18n="browse">📂</button>
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <span class="field-label" data-i18n="cloudFolder">Cloud Token</span>
+                    <input type="text" id="modal-task-cloud" placeholder="folder_token_...">
+                </div>
+
+                <div class="field-row">
+                    <span class="field-label" data-i18n="vaultRoot">Vault Root</span>
+                    <div class="input-with-btn">
+                        <input type="text" id="modal-task-vault" placeholder="Optional vault root">
+                        <button class="browse-vault-btn" id="modal-browse-vault" data-i18n="browse">📂</button>
+                    </div>
+                </div>
+
+                <div class="options-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="modal-task-enabled">
+                        <span>Enable Task</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="modal-task-force">
+                        <span data-i18n="forceUpload">Force Upload</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary-btn" id="modal-cancel">Cancel</button>
+                <button class="primary-btn" id="modal-save">Save</button>
+            </div>
+        </div>
+    </div>
 
     <script src="renderer.js"></script>
 </body>

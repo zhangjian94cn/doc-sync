@@ -60,6 +60,7 @@ electron-app/resources/python/*
 *.ico
 *.png
 !docs/*.png
+!electron-app/build-assets/*.png
 *.zip
 *.dmg
 *.exe
