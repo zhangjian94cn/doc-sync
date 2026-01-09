@@ -72,11 +72,68 @@ class MarkdownToFeishu:
         }
         return mapping.get(block_type, "text")
 
+    def _extract_frontmatter(self, text: str) -> tuple[str, Optional[Dict[str, str]]]:
+        """Extract YAML front matter from text."""
+        pattern = re.compile(r'^---\s*\n(.*?)\n---\s*(\n|$)', re.DOTALL)
+        match = pattern.match(text)
+        if match:
+            fm_text = match.group(1)
+            remaining_text = text[match.end():]
+            
+            metadata = {}
+            for line in fm_text.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'): continue
+                if ':' in line:
+                    key, val = line.split(':', 1)
+                    metadata[key.strip()] = val.strip()
+            
+            return remaining_text, metadata
+        return text, None
+
+    def _create_frontmatter_block(self, metadata: Dict[str, str]) -> Dict[str, Any]:
+        """Create a Feishu Quote block for front matter."""
+        elements = []
+        for i, (k, v) in enumerate(metadata.items()):
+            # Key (Bold)
+            elements.append({
+                "text_run": {
+                    "content": k + ": ",
+                    "text_element_style": {"bold": True}
+                }
+            })
+            # Value + Newline (except last)
+            content = v
+            if i < len(metadata) - 1:
+                content += "\n"
+            elements.append({
+                "text_run": {
+                    "content": content
+                }
+            })
+            
+        return {
+            "block_type": 15, # Quote
+            "quote": {
+                "elements": elements
+            }
+        }
+
     def parse(self, text: str) -> List[Dict[str, Any]]:
+        # 1. Extract Front Matter
+        frontmatter_block = None
+        remaining_text, fm_data = self._extract_frontmatter(text)
+        if fm_data:
+            text = remaining_text
+            frontmatter_block = self._create_frontmatter_block(fm_data)
+        
         text = self._preprocess_markdown(text)
         tokens = self.md.parse(text)
         
         root_blocks = []
+        if frontmatter_block:
+            root_blocks.append(frontmatter_block)
+            
         parent_stack = [] 
         list_type_stack = [] 
         last_block_stack = [None] 
