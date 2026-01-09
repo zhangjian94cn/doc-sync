@@ -1,5 +1,6 @@
 import json
 import os
+import hashlib
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -24,7 +25,30 @@ class FeishuClient:
             .enable_set_token(True) \
             .log_level(lark.LogLevel.INFO) \
             .build()
-        # logger.debug(f"[认证] 初始化 App ID: {app_id[:5]}***")
+        
+        self.asset_cache_path = os.path.join(os.path.expanduser("~"), ".doc_sync", "assets_cache.json")
+        self._asset_cache = self._load_asset_cache()
+
+    def _load_asset_cache(self) -> Dict[str, str]:
+        if os.path.exists(self.asset_cache_path):
+            try:
+                with open(self.asset_cache_path, 'r') as f: return json.load(f)
+            except: pass
+        return {}
+
+    def _save_asset_cache(self):
+        try:
+            os.makedirs(os.path.dirname(self.asset_cache_path), exist_ok=True)
+            with open(self.asset_cache_path, 'w') as f: json.dump(self._asset_cache, f)
+        except Exception as e:
+            logger.warning(f"Failed to save asset cache: {e}")
+
+    def _calculate_file_hash(self, file_path: str) -> str:
+        sha256_hash = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
 
     def _get_request_option(self):
         if self.user_access_token:
@@ -51,6 +75,17 @@ class FeishuClient:
 
     def upload_file(self, file_path: str, parent_node_token: str, drive_route_token: str = None, parent_type: str = None) -> Optional[str]:
         if not os.path.exists(file_path): return None
+        
+        # Check cache
+        try:
+            file_hash = self._calculate_file_hash(file_path)
+            if file_hash in self._asset_cache:
+                logger.debug(f"File found in cache (deduplicated): {os.path.basename(file_path)}")
+                return self._asset_cache[file_hash]
+        except Exception as e:
+            logger.warning(f"Hash calculation failed: {e}")
+            file_hash = None
+
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
         if not drive_route_token: drive_route_token = parent_node_token
@@ -64,7 +99,12 @@ class FeishuClient:
         if not response.success():
             logger.error(f"Upload file failed: {response.code} {response.msg}")
             return None
-        return response.data.file_token
+        
+        token = response.data.file_token
+        if file_hash:
+            self._asset_cache[file_hash] = token
+            self._save_asset_cache()
+        return token
 
     def update_block_file(self, document_id: str, block_id: str, token: str) -> bool:
         from lark_oapi.api.docx.v1.model import PatchDocumentBlockRequest, UpdateBlockRequest, ReplaceFileRequest
@@ -76,6 +116,15 @@ class FeishuClient:
 
     def upload_image(self, file_path: str, parent_node_token: str, drive_route_token: str = None) -> Optional[str]:
         if not os.path.exists(file_path): return None
+        
+        # Check cache
+        try:
+            file_hash = self._calculate_file_hash(file_path)
+            if file_hash in self._asset_cache:
+                logger.debug(f"Image found in cache (deduplicated): {os.path.basename(file_path)}")
+                return self._asset_cache[file_hash]
+        except: file_hash = None
+
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
         if not drive_route_token: drive_route_token = parent_node_token
@@ -85,7 +134,12 @@ class FeishuClient:
             ).build()
             response = self.client.drive.v1.media.upload_all(request, self._get_request_option())
         if not response.success(): return None
-        return response.data.file_token
+        
+        token = response.data.file_token
+        if file_hash:
+            self._asset_cache[file_hash] = token
+            self._save_asset_cache()
+        return token
 
     def download_image(self, file_token: str, save_path: str) -> bool:
         request = DownloadMediaRequest.builder().file_token(file_token).build()
@@ -100,6 +154,16 @@ class FeishuClient:
                 else: return False
         except: return False
         return True
+
+    def delete_file(self, file_token: str) -> bool:
+        """Delete a file or folder by token."""
+        request = DeleteFileRequest.builder().file_token(file_token).type("file").build()
+        response = self.client.drive.v1.file.delete(request, self._get_request_option())
+        if response.success():
+            logger.info(f"Deleted remote file/folder: {file_token}")
+            return True
+        logger.error(f"Failed to delete {file_token}: {response.code} {response.msg}")
+        return False
 
     def get_file_info(self, file_token: str, obj_type: str = "docx") -> Optional[Any]:
         req_doc = RequestDoc.builder().doc_token(file_token).doc_type(obj_type).build()

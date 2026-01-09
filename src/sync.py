@@ -323,6 +323,9 @@ class FolderSyncManager:
         cloud_files = self.client.list_folder_files(cloud_token)
         cloud_map = {f.name: f for f in cloud_files}
         
+        # Track usage to identify deletions
+        used_cloud_tokens = set()
+
         for item in local_items:
             if item.startswith('.') or item == "assets":
                 continue
@@ -332,6 +335,7 @@ class FolderSyncManager:
             if os.path.isdir(item_path):
                 # Handle subdirectories
                 if item in cloud_map and cloud_map[item].type == "folder":
+                    used_cloud_tokens.add(cloud_map[item].token)
                     # Recursively collect from existing folder
                     tasks.extend(self._collect_sync_tasks(item_path, cloud_map[item].token))
                 else:
@@ -343,6 +347,7 @@ class FolderSyncManager:
             elif item.endswith(".md"):
                 doc_name = item[:-3]
                 if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
+                    used_cloud_tokens.add(cloud_map[doc_name].token)
                     tasks.append({
                         "local_path": item_path,
                         "doc_token": cloud_map[doc_name].token,
@@ -361,6 +366,20 @@ class FolderSyncManager:
                         with self._stats_lock:
                             self.stats["failed"] += 1
         
+        # Prune deleted files/folders in Cloud
+        for name, file in cloud_map.items():
+            if file.token not in used_cloud_tokens:
+                # Protect specific folders
+                if name in ["DocSync_Assets", "assets", ".Trash"]:
+                    continue
+                
+                logger.info(f"本地不存在 '{name}'，正在从云端删除...", icon="🗑️")
+                if self.client.delete_file(file.token):
+                    # Also update stats? maybe add 'deleted' stat
+                    pass
+                else:
+                    logger.warning(f"删除失败: {name}")
+
         return tasks
 
     def _execute_sync_task(self, task: Dict[str, Any]) -> str:
