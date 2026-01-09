@@ -374,8 +374,9 @@ class FolderSyncManager:
                     continue
                 
                 logger.info(f"本地不存在 '{name}'，正在从云端删除...", icon="🗑️")
-                if self.client.delete_file(file.token):
-                    # Also update stats? maybe add 'deleted' stat
+                # Determine the correct type for deletion API
+                delete_type = file.type if file.type in ["docx", "folder", "file", "sheet", "bitable"] else "docx"
+                if self.client.delete_file(file.token, file_type=delete_type):
                     pass
                 else:
                     logger.warning(f"删除失败: {name}")

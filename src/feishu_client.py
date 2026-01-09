@@ -155,12 +155,17 @@ class FeishuClient:
         except: return False
         return True
 
-    def delete_file(self, file_token: str) -> bool:
-        """Delete a file or folder by token."""
-        request = DeleteFileRequest.builder().file_token(file_token).type("file").build()
+    def delete_file(self, file_token: str, file_type: str = "docx") -> bool:
+        """Delete a file or folder by token.
+        
+        Args:
+            file_token: The token of the file/folder to delete
+            file_type: One of 'file', 'docx', 'folder', 'bitable', 'sheet', etc.
+        """
+        request = DeleteFileRequest.builder().file_token(file_token).type(file_type).build()
         response = self.client.drive.v1.file.delete(request, self._get_request_option())
         if response.success():
-            logger.info(f"Deleted remote file/folder: {file_token}")
+            logger.info(f"Deleted remote {file_type}: {file_token}")
             return True
         logger.error(f"Failed to delete {file_token}: {response.code} {response.msg}")
         return False
