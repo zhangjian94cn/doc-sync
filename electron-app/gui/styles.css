@@ -659,3 +659,88 @@ input:checked + .slider:before { transform: translateX(16px); background-color: 
 ::-webkit-scrollbar-thumb:hover {
     background: #3b424a;
 }
+
+/* --- Sync Options --- */
+.sync-options {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+/* --- Secondary Button --- */
+.secondary-btn {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.secondary-btn:hover {
+    background-color: rgba(128,128,128,0.1);
+    border-color: var(--text-secondary);
+}
+
+/* --- Button Group --- */
+.button-group {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* --- Health Check Result --- */
+.health-result {
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.health-result pre {
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--bg-color);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.check-success {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.check-failed {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+/* --- Browse Vault Button --- */
+.browse-vault-btn {
+    padding: 0 12px;
+    background-color: #30363d;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.browse-vault-btn:hover {
+    background-color: #3b424a;
+}
+
+/* --- Options Row --- */
+.options-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-top: 8px;
+}

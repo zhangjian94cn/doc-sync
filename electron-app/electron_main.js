@@ -9,17 +9,15 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
-    titleBarStyle: 'hiddenInset', // Mac-style seamless title bar
+    titleBarStyle: 'hiddenInset',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false, // For simplicity in this local tool
+      contextIsolation: false,
     },
     backgroundColor: '#1e1e1e'
   });
 
-  // Force clear cache
   mainWindow.webContents.session.clearCache();
-
   mainWindow.loadFile(path.join(__dirname, 'gui/index.html'));
   // mainWindow.webContents.openDevTools(); // Uncomment for debugging
 }
@@ -40,30 +38,20 @@ app.on('activate', () => {
 
 // --- Helpers ---
 
-// Get path to the python executable or script
 function getPythonPath() {
   const isDev = !app.isPackaged;
   if (isDev) {
-    // In dev, use system python and source script
-    // Running from electron-app/ directory, so main.py is in ../main.py
     return { command: 'python3', args: ['main.py'] };
   } else {
-    // In production, use the bundled executable
     let execName = process.platform === 'win32' ? 'doc-sync-core.exe' : 'doc-sync-core';
     const execPath = path.join(process.resourcesPath, 'python', execName);
     return { command: execPath, args: [] };
   }
 }
 
-function getEnvPath() {
-  return app.isPackaged 
-    ? path.join(process.resourcesPath, '.env') 
-    : path.join(__dirname, '../.env');
-}
-
 function getConfigPath() {
-  return app.isPackaged 
-    ? path.join(process.resourcesPath, 'sync_config.json') 
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'sync_config.json')
     : path.join(__dirname, '../sync_config.json');
 }
 
@@ -77,71 +65,93 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('get-config', async () => {
-  const envPath = getEnvPath();
-  const configPath = getConfigPath();
-  
-  let envContent = '';
-  let syncConfig = [];
+ipcMain.handle('select-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Markdown', extensions: ['md'] }]
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
 
-  try {
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf-8');
-    }
-  } catch (e) { console.error('Error reading .env', e); }
+ipcMain.handle('get-config', async () => {
+  const configPath = getConfigPath();
+
+  let config = {
+    feishu_app_id: '',
+    feishu_app_secret: '',
+    feishu_user_access_token: '',
+    feishu_user_refresh_token: '',
+    feishu_assets_token: '',
+    tasks: []
+  };
 
   try {
     if (fs.existsSync(configPath)) {
-      syncConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (typeof data === 'object' && !Array.isArray(data)) {
+        config = { ...config, ...data };
+      } else if (Array.isArray(data)) {
+        // Legacy format: array of tasks
+        config.tasks = data;
+      }
     }
-  } catch (e) { console.error('Error reading config', e); }
+  } catch (e) {
+    console.error('Error reading config', e);
+  }
 
-  // Parse .env manually for simplicity
-  const envVars = {};
-  envContent.split('\n').forEach(line => {
-    const [key, ...val] = line.split('=');
-    if (key && val) envVars[key.trim()] = val.join('=').trim();
-  });
-
-  return { env: envVars, tasks: syncConfig };
+  return config;
 });
 
 ipcMain.handle('save-config', async (event, data) => {
-  const { env, tasks } = data;
-  const envPath = getEnvPath();
   const configPath = getConfigPath();
 
-  // Save .env
-  if (env) {
-    const envStr = Object.entries(env)
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n');
-    fs.writeFileSync(envPath, envStr);
+  // Load existing config first
+  let config = {};
+  try {
+    if (fs.existsSync(configPath)) {
+      const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (typeof existing === 'object' && !Array.isArray(existing)) {
+        config = existing;
+      }
+    }
+  } catch (e) { }
+
+  // Merge new data
+  if (data.feishu_app_id !== undefined) {
+    config.feishu_app_id = data.feishu_app_id;
+  }
+  if (data.feishu_app_secret !== undefined) {
+    config.feishu_app_secret = data.feishu_app_secret;
+  }
+  if (data.tasks !== undefined) {
+    config.tasks = data.tasks;
   }
 
-  // Save sync_config.json
-  if (tasks) {
-    fs.writeFileSync(configPath, JSON.stringify(tasks, null, 2));
-  }
-  
+  // Save
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
   return { success: true };
 });
 
-ipcMain.on('run-sync', (event) => {
+ipcMain.on('run-sync', (event, options = {}) => {
   const { command, args } = getPythonPath();
-  
-  // In dev: cwd should be root (..) so python can import src and find config in root
-  // In prod: cwd should be resourcesPath where .env and config are expected
+
+  // Add force flag if requested
+  if (options.force) {
+    args.push('--force');
+  }
+
   const cwd = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
 
-  const options = {
+  const spawnOptions = {
     cwd: cwd,
     env: { ...process.env }
   };
-  
-  event.reply('sync-log', `🚀 Starting sync process...\nCommand: ${command} ${args.join(' ')}\nCWD: ${options.cwd}\n`);
 
-  const child = spawn(command, args, options);
+  event.reply('sync-log', `🚀 Starting sync process...\nCommand: ${command} ${args.join(' ')}\nCWD: ${spawnOptions.cwd}\n`);
+
+  const child = spawn(command, args, spawnOptions);
 
   child.stdout.on('data', (data) => {
     event.reply('sync-log', data.toString());
@@ -156,3 +166,48 @@ ipcMain.on('run-sync', (event) => {
     event.reply('sync-finished', code === 0);
   });
 });
+
+// Health check handler
+ipcMain.handle('health-check', async () => {
+  const { command, args } = getPythonPath();
+  const cwd = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+
+  return new Promise((resolve) => {
+    const checkArgs = [...args];
+    // Just try to import and exit
+    const child = spawn(command, ['--help'], { cwd, env: process.env });
+
+    let output = '';
+    child.stdout.on('data', (data) => output += data.toString());
+    child.stderr.on('data', (data) => output += data.toString());
+
+    child.on('close', (code) => {
+      resolve({ success: code === 0, output });
+    });
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      child.kill();
+      resolve({ success: false, output: 'Timeout' });
+    }, 5000);
+  });
+});
+
+// Clean backups handler
+ipcMain.on('run-clean', (event) => {
+  const { command, args } = getPythonPath();
+  const cwd = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+
+  const cleanArgs = [...args, '--clean'];
+
+  const child = spawn(command, cleanArgs, { cwd, env: process.env });
+
+  let output = '';
+  child.stdout.on('data', (data) => output += data.toString());
+  child.stderr.on('data', (data) => output += data.toString());
+
+  child.on('close', (code) => {
+    event.reply('clean-finished', code === 0);
+  });
+});
+

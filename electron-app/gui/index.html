@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FeishuSync</title>
+    <title>DocSync</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar -->
@@ -19,13 +21,14 @@
                         <path d="M12 12v9" />
                     </svg>
                 </div>
-                <span data-i18n="brand">FeishuSync</span>
+                <span data-i18n="brand">DocSync</span>
             </div>
-            
+
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="dashboard" data-i18n="dashboard">Dashboard</button>
                 <button class="nav-item" data-tab="tasks" data-i18n="tasks">Tasks</button>
                 <button class="nav-item" data-tab="settings" data-i18n="settings">Settings</button>
+                <button class="nav-item" data-tab="tools" data-i18n="tools">Tools</button>
                 <button class="nav-item" data-tab="appearance" data-i18n="appearance">Appearance</button>
             </nav>
 
@@ -39,15 +42,27 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            
+
             <!-- Header -->
             <header class="top-bar">
                 <h2 id="page-title" data-key="dashboard" data-i18n="dashboard">Dashboard</h2>
                 <div style="flex: 1; -webkit-app-region: drag;"></div> <!-- Spacer -->
                 <div class="theme-toggle-container" style="position: relative; z-index: 20000;">
                     <button id="theme-toggle-btn" class="icon-btn" title="Toggle Theme">
-                        <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                        <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                        <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
                     </button>
                 </div>
                 <div class="window-drag-area"></div>
@@ -59,18 +74,29 @@
                     <div class="sync-circle-container">
                         <button id="start-sync-btn" class="sync-button">
                             <div class="icon-box">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path
+                                        d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                                </svg>
                             </div>
                             <span data-i18n="syncNow">Sync Now</span>
                         </button>
                     </div>
-                    <p class="last-sync-text"><span data-i18n="lastSynced">Last synced</span>: <span id="last-sync-time" data-i18n="never">Never</span></p>
+                    <div class="sync-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="force-sync-checkbox">
+                            <span data-i18n="forceSync">Force Sync (overwrite cloud)</span>
+                        </label>
+                    </div>
+                    <p class="last-sync-text"><span data-i18n="lastSynced">Last synced</span>: <span id="last-sync-time"
+                            data-i18n="never">Never</span></p>
                 </div>
 
                 <div class="log-panel">
                     <div class="panel-header">
                         <h3 data-i18n="activityLog">Activity Log</h3>
-                        <button id="clear-log-btn" class="icon-btn" title="Clear Logs" data-i18n="clearLogs">Clear Logs</button>
+                        <button id="clear-log-btn" class="icon-btn" title="Clear Logs" data-i18n="clearLogs">Clear
+                            Logs</button>
                     </div>
                     <div class="log-console" id="log-output">
                         <div class="log-placeholder" data-i18n="ready">Ready to sync...</div>
@@ -83,7 +109,10 @@
                 <div class="view-header">
                     <p data-i18n="manageSyncPaths">Manage your synchronization paths</p>
                     <button id="add-task-btn" class="primary-btn small">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
                         <span data-i18n="addTask">Add Task</span>
                     </button>
                 </div>
@@ -111,7 +140,8 @@
                             </div>
                         </div>
                         <div class="card-footer">
-                            <button id="save-env-btn" class="primary-btn" data-i18n="saveCredentials">Save Credentials</button>
+                            <button id="save-env-btn" class="primary-btn" data-i18n="saveCredentials">Save
+                                Credentials</button>
                         </div>
                     </div>
 
@@ -120,8 +150,40 @@
                             <h3 data-i18n="about">About</h3>
                         </div>
                         <div class="card-body">
-                            <p class="text-muted">FeishuSync v1.0.0</p>
-                            <p class="text-muted" data-i18n="appDesc">A modern bidirectional synchronization tool for Obsidian and Feishu.</p>
+                            <p class="text-muted">DocSync v1.1.0</p>
+                            <p class="text-muted" data-i18n="appDesc">A modern bidirectional synchronization tool for
+                                Obsidian and Feishu.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools View -->
+            <div id="tools" class="view">
+                <div class="settings-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="healthCheck">Health Check</h3>
+                            <p data-i18n="healthCheckDesc">Check environment and configuration</p>
+                        </div>
+                        <div class="card-body">
+                            <button id="run-health-check-btn" class="primary-btn" data-i18n="runHealthCheck">Run Health
+                                Check</button>
+                            <div id="health-check-result" class="health-result"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="backupManagement">Backup Management</h3>
+                            <p data-i18n="backupDesc">Manage backup files</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="button-group">
+                                <button id="clean-backups-btn" class="secondary-btn" data-i18n="cleanBackups">Clean All
+                                    Backups</button>
+                            </div>
+                            <p class="text-muted" data-i18n="cleanBackupsNote">This will delete all .bak.* files</p>
                         </div>
                     </div>
                 </div>
@@ -154,17 +216,24 @@
                             <div class="input-group">
                                 <label data-i18n="accentColor">Accent Color</label>
                                 <div class="color-palette">
-                                    <button class="color-btn" data-color="#00D6B9" style="background:#00D6B9" title="Feishu Green"></button>
-                                    <button class="color-btn" data-color="#0969da" style="background:#0969da" title="GitHub Blue"></button>
-                                    <button class="color-btn" data-color="#e91e63" style="background:#e91e63" title="Pink"></button>
-                                    <button class="color-btn" data-color="#ff9800" style="background:#ff9800" title="Orange"></button>
-                                    <button class="color-btn" data-color="#9c27b0" style="background:#9c27b0" title="Purple"></button>
-                                    <button class="color-btn" data-color="#4caf50" style="background:#4caf50" title="Green"></button>
+                                    <button class="color-btn" data-color="#00D6B9" style="background:#00D6B9"
+                                        title="Feishu Green"></button>
+                                    <button class="color-btn" data-color="#0969da" style="background:#0969da"
+                                        title="GitHub Blue"></button>
+                                    <button class="color-btn" data-color="#e91e63" style="background:#e91e63"
+                                        title="Pink"></button>
+                                    <button class="color-btn" data-color="#ff9800" style="background:#ff9800"
+                                        title="Orange"></button>
+                                    <button class="color-btn" data-color="#9c27b0" style="background:#9c27b0"
+                                        title="Purple"></button>
+                                    <button class="color-btn" data-color="#4caf50" style="background:#4caf50"
+                                        title="Green"></button>
                                 </div>
                             </div>
                         </div>
                         <div class="card-footer">
-                            <button id="save-appearance-btn" class="primary-btn" data-i18n="savePreferences">Save Preferences</button>
+                            <button id="save-appearance-btn" class="primary-btn" data-i18n="savePreferences">Save
+                                Preferences</button>
                         </div>
                     </div>
 
@@ -195,14 +264,18 @@
         <div class="task-card">
             <div class="task-card-header">
                 <div class="task-icon">📄</div>
-                <input type="text" class="task-note-input" placeholder="Task Name" data-i18n-placeholder="taskNamePlaceholder">
+                <input type="text" class="task-note-input" placeholder="Task Name"
+                    data-i18n-placeholder="taskNamePlaceholder">
                 <div class="task-actions">
                     <label class="switch" title="Enable/Disable">
                         <input type="checkbox" class="task-enabled">
                         <span class="slider round"></span>
                     </label>
                     <button class="icon-btn delete-task-btn" title="Remove" data-i18n="removeTask">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -210,13 +283,23 @@
                 <div class="field-row">
                     <span class="field-label" data-i18n="localPath">Local</span>
                     <div class="input-with-btn">
-                        <input type="text" class="task-local" placeholder="Path..." readonly data-i18n-placeholder="pathPlaceholder">
+                        <input type="text" class="task-local" placeholder="Path..." readonly
+                            data-i18n-placeholder="pathPlaceholder">
                         <button class="browse-btn" data-i18n="browse">📂</button>
                     </div>
                 </div>
                 <div class="field-row">
                     <span class="field-label" data-i18n="cloudFolder">Cloud</span>
-                    <input type="text" class="task-cloud" placeholder="Folder Token" data-i18n-placeholder="folderTokenPlaceholder">
+                    <input type="text" class="task-cloud" placeholder="Folder Token"
+                        data-i18n-placeholder="folderTokenPlaceholder">
+                </div>
+                <div class="field-row">
+                    <span class="field-label" data-i18n="vaultRoot">Vault</span>
+                    <div class="input-with-btn">
+                        <input type="text" class="task-vault" placeholder="Vault Root (optional)"
+                            data-i18n-placeholder="vaultRootPlaceholder">
+                        <button class="browse-vault-btn" data-i18n="browse">📂</button>
+                    </div>
                 </div>
                 <div class="options-row">
                     <label class="checkbox-label">
@@ -230,4 +313,5 @@
 
     <script src="renderer.js"></script>
 </body>
+
 </html>

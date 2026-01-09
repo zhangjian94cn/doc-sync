@@ -59,6 +59,7 @@ electron-app/resources/python/*
 *.icns
 *.ico
 *.png
+!docs/*.png
 *.zip
 *.dmg
 *.exe
