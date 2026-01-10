@@ -77,7 +77,19 @@ class ResourceIndex:
         
         # Look up by filename in index
         filename = os.path.basename(path)
-        return self._index.get(filename)
+        result = self._index.get(filename)
+        if result:
+            return result
+        
+        # Fallback: Try with .md suffix for Obsidian Excalidraw plugin
+        # The plugin stores files as .excalidraw.md but links as .excalidraw
+        if filename.endswith('.excalidraw'):
+            md_filename = filename + '.md'
+            result = self._index.get(md_filename)
+            if result:
+                return result
+        
+        return None
     
     def refresh(self) -> None:
         """Rebuild the index (call after adding/removing files)."""

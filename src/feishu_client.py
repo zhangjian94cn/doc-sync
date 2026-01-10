@@ -845,12 +845,35 @@ class FeishuClient:
         return blocks
 
     def clear_document(self, document_id: str):
+        """Clear all blocks from a document."""
+        self._rate_limit()
         blocks = self.get_all_blocks(document_id)
-        if not blocks: return
-        request = BatchDeleteDocumentBlockChildrenRequest.builder().document_id(document_id).block_id(document_id).request_body(
-            BatchDeleteDocumentBlockChildrenRequestBody.builder().start_index(0).end_index(len(blocks)).build()
-        ).build()
-        self.client.docx.v1.document_block_children.batch_delete(request, self._get_request_option())
+        if not blocks: 
+            return
+        
+        max_retries = API_MAX_RETRIES
+        retry_delay = API_RETRY_BASE_DELAY
+        
+        for attempt in range(max_retries):
+            request = BatchDeleteDocumentBlockChildrenRequest.builder().document_id(document_id).block_id(document_id).request_body(
+                BatchDeleteDocumentBlockChildrenRequestBody.builder().start_index(0).end_index(len(blocks)).build()
+            ).build()
+            resp = self.client.docx.v1.document_block_children.batch_delete(request, self._get_request_option())
+            
+            if resp.success():
+                logger.debug(f"Document {document_id} cleared successfully")
+                return
+            elif resp.code == 99991400:  # Rate limit
+                if attempt < max_retries - 1:
+                    logger.warning(f"Rate limited (99991400), retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    logger.error(f"Clear document failed after {max_retries} retries: {resp.code} {resp.msg}")
+            else:
+                logger.error(f"Clear document failed: {resp.code} {resp.msg}")
+                return
 
     def update_block_image(self, document_id: str, block_id: str, token: str) -> bool:
         from lark_oapi.api.docx.v1.model import PatchDocumentBlockRequest, UpdateBlockRequest, ReplaceImageRequest
