@@ -198,3 +198,139 @@ class TestGetBlock:
         result = mock_client.get_block("doc123", "block456")
         
         assert result is None
+
+
+class TestBatchUpdateBlocks:
+    """Test batch_update_blocks method."""
+    
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock FeishuClient."""
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark_client = MagicMock()
+            mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
+            
+            from src.feishu_client import FeishuClient
+            client = FeishuClient("test_id", "test_secret", "test_token")
+            client.client = mock_lark_client
+            yield client
+    
+    def test_batch_update_text_elements(self, mock_client):
+        """Test batch updating text elements."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {"blocks": [{"block_id": "block1"}, {"block_id": "block2"}]}
+            }
+            mock_requests.patch.return_value = mock_response
+            
+            requests = [
+                {
+                    "block_id": "block1",
+                    "update_text_elements": {
+                        "elements": [{"text_run": {"content": "Hello"}}]
+                    }
+                },
+                {
+                    "block_id": "block2",
+                    "update_text_elements": {
+                        "elements": [{"text_run": {"content": "World"}}]
+                    }
+                }
+            ]
+            
+            result = mock_client.batch_update_blocks("doc123", requests)
+            
+            assert result is not None
+            assert len(result) == 2
+    
+    def test_batch_update_text_style(self, mock_client):
+        """Test batch updating text styles."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {"blocks": [{"block_id": "block1"}]}
+            }
+            mock_requests.patch.return_value = mock_response
+            
+            requests = [
+                {
+                    "block_id": "block1",
+                    "update_text_style": {
+                        "style": {"done": True, "align": 2},
+                        "fields": [1, 2]
+                    }
+                }
+            ]
+            
+            result = mock_client.batch_update_blocks("doc123", requests)
+            
+            assert result is not None
+    
+    def test_batch_update_table_operations(self, mock_client):
+        """Test batch updating with table operations."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {"blocks": [{"block_id": "table1"}]}
+            }
+            mock_requests.patch.return_value = mock_response
+            
+            requests = [
+                {
+                    "block_id": "table1",
+                    "merge_table_cells": {
+                        "row_start_index": 0,
+                        "row_end_index": 1,
+                        "column_start_index": 0,
+                        "column_end_index": 2
+                    }
+                }
+            ]
+            
+            result = mock_client.batch_update_blocks("doc123", requests)
+            
+            assert result is not None
+    
+    def test_batch_update_failure(self, mock_client):
+        """Test handling of batch update failure."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 500,
+                "msg": "Internal error"
+            }
+            mock_requests.patch.return_value = mock_response
+            
+            result = mock_client.batch_update_blocks("doc123", [])
+            
+            assert result is None
+    
+    def test_batch_update_rate_limit_retry(self, mock_client):
+        """Test batch update retries on rate limit."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            # First call returns rate limit, second succeeds
+            mock_response_429 = Mock()
+            mock_response_429.status_code = 429
+            
+            mock_response_ok = Mock()
+            mock_response_ok.status_code = 200
+            mock_response_ok.json.return_value = {
+                "code": 0,
+                "data": {"blocks": [{"block_id": "block1"}]}
+            }
+            
+            mock_requests.patch.side_effect = [mock_response_429, mock_response_ok]
+            
+            result = mock_client.batch_update_blocks("doc123", [{"block_id": "block1"}])
+            
+            # Should succeed after retry
+            assert result is not None
+

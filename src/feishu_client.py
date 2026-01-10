@@ -5,7 +5,7 @@ import time
 import threading
 from typing import Any, Dict, List, Optional
 
-import requests
+import requests as requests_module
 import lark_oapi as lark
 from lark_oapi.api.docx.v1 import *
 from lark_oapi.api.drive.v1 import *
@@ -78,7 +78,7 @@ class FeishuClient:
         data = {"app_id": self.app_id, "app_secret": self.app_secret}
         try:
             self._rate_limit()  # Throttle requests
-            resp = requests.post(url, headers=headers, json=data, timeout=10)
+            resp = requests_module.post(url, headers=headers, json=data, timeout=10)
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 return resp.json().get("tenant_access_token")
             logger.warning(f"获取 tenant_access_token 失败: {resp.status_code}")
@@ -272,6 +272,106 @@ class FeishuClient:
             logger.error(f"Get block exception: {e}")
             return None
 
+    def batch_update_blocks(self, document_id: str, 
+                            requests: List[Dict[str, Any]]) -> Optional[List[Dict]]:
+        """Batch update multiple blocks in a single API call.
+        
+        This is more efficient than calling update_block_text multiple times.
+        Supports up to 200 blocks per request.
+        
+        Args:
+            document_id: Document ID
+            requests: List of update requests, each containing:
+                - block_id: The block ID to update
+                - update_text_elements: Update text content (optional)
+                - update_text_style: Update text style (optional)
+                - update_table_property: Update table properties (optional)
+                - insert_table_row/column: Insert table rows/columns (optional)
+                - delete_table_rows/columns: Delete table rows/columns (optional)
+                - merge_table_cells: Merge table cells (optional)
+                - replace_image: Replace image (optional)
+                - replace_file: Replace file (optional)
+        
+        Returns:
+            List of updated block data, or None if failed
+            
+        Example:
+            client.batch_update_blocks("doc_id", [
+                {
+                    "block_id": "block1",
+                    "update_text_elements": {
+                        "elements": [{"text_run": {"content": "Hello"}}]
+                    }
+                },
+                {
+                    "block_id": "block2",
+                    "update_text_style": {
+                        "style": {"done": True},
+                        "fields": [2]  # Update done field
+                    }
+                }
+            ])
+        """
+        self._rate_limit()
+        
+        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks/batch_update"
+        
+        token = self.user_access_token or self._get_tenant_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        
+        body = {"requests": requests}
+        
+        max_retries = API_MAX_RETRIES
+        retry_delay = API_RETRY_BASE_DELAY
+        
+        for attempt in range(max_retries):
+            try:
+                self._rate_limit()
+                resp = requests_module.patch(url, headers=headers, json=body)
+                
+                if resp.status_code == 429:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Rate limited (429), retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        logger.error(f"Rate limited after {max_retries} retries")
+                        return None
+                
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    
+                    if res_json.get("code") == 99991400:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Rate limited (99991400), retrying in {retry_delay}s...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                            continue
+                        else:
+                            logger.error(f"Rate limited after {max_retries} retries")
+                            return None
+                    
+                    if res_json.get("code") == 0:
+                        blocks = res_json.get("data", {}).get("blocks", [])
+                        logger.debug(f"Batch updated {len(blocks)} blocks successfully")
+                        return blocks
+                    else:
+                        logger.error(f"Batch update failed: code={res_json.get('code')}, msg={res_json.get('msg')}")
+                        return None
+                else:
+                    logger.error(f"Batch update HTTP error: {resp.status_code}")
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Batch update exception: {e}")
+                return None
+        
+        return None
+
     def upload_image(self, file_path: str, parent_node_token: str, drive_route_token: str = None) -> Optional[str]:
         if not os.path.exists(file_path): return None
         
@@ -371,7 +471,7 @@ class FeishuClient:
             url = "https://open.feishu.cn/open-apis/drive/explorer/v2/root_folder/meta"
             token = self.user_access_token or self._get_tenant_access_token()
             headers = {"Authorization": f"Bearer {token}"}
-            resp = requests.get(url, headers=headers)
+            resp = requests_module.get(url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("code") == 0: root_token = data["data"]["token"]
@@ -658,7 +758,7 @@ class FeishuClient:
             for attempt in range(max_retries):
                 try:
                     self._rate_limit()  # Throttle requests
-                    resp = requests.post(url, headers=headers, json=body)
+                    resp = requests_module.post(url, headers=headers, json=body)
                     
                     # Handle rate limiting (HTTP 429 or code 99991400)
                     if resp.status_code == 429:
