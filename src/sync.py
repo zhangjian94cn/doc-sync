@@ -61,7 +61,8 @@ class SyncManager:
                 extensions={'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp',
                            'mp4', 'mov', 'avi', 'mkv', 'webm',
                            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-                           'zip', 'rar', '7z', 'tar'}
+                           'zip', 'rar', '7z', 'tar',
+                           'excalidraw', 'drawio', 'canvas'}  # Obsidian extensions
             )
             SyncManager._resource_index_root = self.vault_root
 
