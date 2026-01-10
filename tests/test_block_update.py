@@ -466,3 +466,82 @@ class TestGetBlockChildren:
             
             assert result is not None
             assert len(result) == 1
+
+
+class TestDeleteBlockChildren:
+    """Test delete_block_children method."""
+    
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock FeishuClient."""
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark_client = MagicMock()
+            mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
+            
+            from src.feishu_client import FeishuClient
+            client = FeishuClient("test_id", "test_secret", "test_token")
+            client.client = mock_lark_client
+            yield client
+    
+    def test_delete_children_success(self, mock_client):
+        """Test successful deletion of child blocks."""
+        mock_response = Mock()
+        mock_response.success.return_value = True
+        mock_response.data.document_revision_id = 5
+        mock_response.data.client_token = "token123"
+        mock_client.client.docx.v1.document_block_children.batch_delete.return_value = mock_response
+        
+        result = mock_client.delete_block_children("doc123", "block456", 0, 2)
+        
+        assert result is not None
+        assert result["document_revision_id"] == 5
+        assert result["client_token"] == "token123"
+    
+    def test_delete_children_with_client_token(self, mock_client):
+        """Test deletion with idempotency token."""
+        mock_response = Mock()
+        mock_response.success.return_value = True
+        mock_response.data.document_revision_id = 6
+        mock_response.data.client_token = "my-token"
+        mock_client.client.docx.v1.document_block_children.batch_delete.return_value = mock_response
+        
+        result = mock_client.delete_block_children(
+            "doc123", "block456", 1, 3, client_token="my-token"
+        )
+        
+        assert result is not None
+        assert result["client_token"] == "my-token"
+    
+    def test_delete_children_failure(self, mock_client):
+        """Test handling of API failure."""
+        mock_response = Mock()
+        mock_response.success.return_value = False
+        mock_response.code = 1770001
+        mock_response.msg = "invalid param"
+        mock_client.client.docx.v1.document_block_children.batch_delete.return_value = mock_response
+        
+        result = mock_client.delete_block_children("doc123", "block456", 0, 1)
+        
+        assert result is None
+    
+    def test_delete_children_rate_limit_retry(self, mock_client):
+        """Test rate limit retry logic."""
+        # First call returns rate limit, second succeeds
+        mock_response_limited = Mock()
+        mock_response_limited.success.return_value = False
+        mock_response_limited.code = 99991400
+        mock_response_limited.msg = "rate limited"
+        
+        mock_response_ok = Mock()
+        mock_response_ok.success.return_value = True
+        mock_response_ok.data.document_revision_id = 7
+        mock_response_ok.data.client_token = "success-token"
+        
+        mock_client.client.docx.v1.document_block_children.batch_delete.side_effect = [
+            mock_response_limited, mock_response_ok
+        ]
+        
+        result = mock_client.delete_block_children("doc123", "block456", 0, 1)
+        
+        assert result is not None
+        assert result["document_revision_id"] == 7

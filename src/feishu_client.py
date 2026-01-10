@@ -376,6 +376,94 @@ class FeishuClient:
         
         return all_items
 
+    def delete_block_children(self, document_id: str, block_id: str,
+                              start_index: int, end_index: int,
+                              client_token: str = None) -> Optional[Dict[str, Any]]:
+        """Delete a range of child blocks from a parent block.
+        
+        Args:
+            document_id: Document ID
+            block_id: Parent block ID whose children to delete
+            start_index: Start index (inclusive, 0-based)
+            end_index: End index (exclusive), must be > start_index
+            client_token: Optional idempotency token for the operation
+        
+        Returns:
+            Dict with document_revision_id and client_token, or None if failed
+            
+        Note:
+            - Cannot delete table rows/columns or grid columns (use batch_update)
+            - Cannot delete all children of Table Cell, Grid Column, or Callout
+            
+        Example:
+            # Delete first 2 children of root block
+            result = client.delete_block_children("doc_id", "doc_id", 0, 2)
+            
+            # Delete with idempotency token
+            result = client.delete_block_children("doc_id", "block_id", 1, 3,
+                                                  client_token="uuid...")
+        """
+        from lark_oapi.api.docx.v1 import (
+            BatchDeleteDocumentBlockChildrenRequest,
+            BatchDeleteDocumentBlockChildrenRequestBody
+        )
+        
+        self._rate_limit()
+        
+        max_retries = API_MAX_RETRIES
+        retry_delay = API_RETRY_BASE_DELAY
+        
+        for attempt in range(max_retries):
+            try:
+                # Build request body
+                body_builder = BatchDeleteDocumentBlockChildrenRequestBody.builder() \
+                    .start_index(start_index) \
+                    .end_index(end_index)
+                
+                # Build request
+                request_builder = BatchDeleteDocumentBlockChildrenRequest.builder() \
+                    .document_id(document_id) \
+                    .block_id(block_id) \
+                    .document_revision_id(-1) \
+                    .request_body(body_builder.build())
+                
+                if client_token:
+                    request_builder.client_token(client_token)
+                
+                request = request_builder.build()
+                
+                response = self.client.docx.v1.document_block_children.batch_delete(
+                    request, self._get_request_option()
+                )
+                
+                if response.success():
+                    result = {
+                        "document_revision_id": response.data.document_revision_id,
+                        "client_token": response.data.client_token
+                    }
+                    logger.debug(f"Deleted blocks [{start_index}:{end_index}] from {block_id}")
+                    return result
+                
+                # Check for rate limiting
+                if response.code == 99991400:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Rate limited, retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        logger.error(f"Rate limited after {max_retries} retries")
+                        return None
+                
+                logger.error(f"Delete block children failed: code={response.code}, msg={response.msg}")
+                return None
+                
+            except Exception as e:
+                logger.error(f"Delete block children exception: {e}")
+                return None
+        
+        return None
+
     def batch_update_blocks(self, document_id: str, 
                             requests: List[Dict[str, Any]]) -> Optional[List[Dict]]:
         """Batch update multiple blocks in a single API call.
