@@ -64,6 +64,15 @@ npm start
 | `python scripts/cli.py restore <path>` | 还原备份 |
 | `python scripts/cli.py clean` | 清理备份 |
 | `python main.py --force` | 强制覆盖云端 |
+| `python scripts/download_doc.py <doc_id>` | 下载飞书文档为 Markdown |
+
+### 演示脚本
+
+| 脚本 | 说明 |
+|------|------|
+| `python examples/api_demo.py` | API 功能演示 |
+| `python examples/markdown_convert_demo.py` | Markdown 转换对比 |
+| `python scripts/block_operations_demo.py` | 块 CRUD 操作演示 |
 
 ### 桌面应用
 
@@ -134,7 +143,7 @@ cd electron-app && npm test
 cd electron-app && npm run test:e2e
 ```
 
-**测试覆盖**：29 个测试 (Python 4 + Jest 9 + Playwright 20)
+**测试覆盖**：79 个 Python 测试 + Jest 9 + Playwright 20
 
 ---
 
