@@ -809,16 +809,39 @@ class FeishuClient:
         from lark_oapi.api.docx.v1.model import ListDocumentBlockRequest
         blocks = []
         page_token = None
+        
+        max_retries = API_MAX_RETRIES
+        retry_delay = API_RETRY_BASE_DELAY
+        
         while True:
+            self._rate_limit()
             builder = ListDocumentBlockRequest.builder().document_id(document_id).page_size(500)
             if page_token: builder.page_token(page_token)
-            resp = self.client.docx.v1.document_block.list(builder.build(), self._get_request_option())
-            if not resp.success():
-                logger.error(f"List blocks failed: {resp.code} {resp.msg}")
+            
+            for attempt in range(max_retries):
+                resp = self.client.docx.v1.document_block.list(builder.build(), self._get_request_option())
+                
+                if resp.success():
+                    if resp.data and resp.data.items: 
+                        blocks.extend(resp.data.items)
+                    page_token = resp.data.page_token
+                    break
+                elif resp.code == 99991400:  # Rate limit
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Rate limited (99991400), retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        logger.error(f"List blocks failed after {max_retries} retries: {resp.code} {resp.msg}")
+                        return blocks
+                else:
+                    logger.error(f"List blocks failed: {resp.code} {resp.msg}")
+                    return blocks
+            
+            if not page_token: 
                 break
-            if resp.data and resp.data.items: blocks.extend(resp.data.items)
-            page_token = resp.data.page_token
-            if not page_token: break
+        
         return blocks
 
     def clear_document(self, document_id: str):
