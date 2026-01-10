@@ -1,3 +1,9 @@
+"""
+Sync Manager Module
+
+Provides single-file synchronization between local Markdown and Feishu documents.
+"""
+
 import os
 import sys
 import hashlib
@@ -17,12 +23,15 @@ from src.feishu_client import FeishuClient
 from src.converter import MarkdownToFeishu, FeishuToMarkdown
 from src.utils import pad_center, parse_cloud_time
 from src.logger import logger
-from src.resource_index import ResourceIndex
+from src.sync.resource import ResourceIndex
+
 
 class SyncResult(IntEnum):
+    """Sync operation result codes."""
     SUCCESS = 0
     EMPTY_CLOUD = 1
     ERROR = 2
+
 
 class SyncManager:
     """Manages synchronization between local Markdown files and Feishu documents."""
@@ -39,7 +48,6 @@ class SyncManager:
         self.vault_root = vault_root or os.path.dirname(self.md_path)
         self.batch_id = batch_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Initialize or reuse resource index
         self._init_resource_index()
         
         if client:
@@ -63,7 +71,7 @@ class SyncManager:
                            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
                            'zip', 'rar', '7z', 'tar',
                            'excalidraw', 'drawio', 'canvas',
-                           'md'}  # Include .md for .excalidraw.md files
+                           'md'}
             )
             SyncManager._resource_index_root = self.vault_root
 
@@ -122,14 +130,11 @@ class SyncManager:
             elif "image" in obj: content = obj["image"].get("token", "")
             elif "file" in obj: content = obj["file"].get("token", "")
 
-        # Prioritize children_data (Cloud objects) or children (Local objects)
-        # But filter out strings (Cloud IDs) to avoid AttributeError
         raw_children = block_dict.get("children_data")
         if not raw_children:
             raw_children = block_dict.get("children") or []
         
         children = [c for c in raw_children if isinstance(c, dict)]
-        
         child_hashes = [self._calculate_tree_hash(c) for c in children]
         
         data_str = f"{b_type}:{content}:{','.join(child_hashes)}"
@@ -181,12 +186,10 @@ class SyncManager:
         else:
             logger.info(f"差异分析: 发现 {ops_count} 处变更。使用增量同步...", icon="📊")
             
-            # Track batch updates for efficiency
             batch_updates = []
             
             for tag, i1, i2, j1, j2 in reversed(opcodes):
                 if tag == 'replace':
-                    # Try to update in-place if block types match (1:1 replace)
                     if i2 - i1 == 1 and j2 - j1 == 1:
                         update = self._try_update_block_content(
                             root_children[i1], local_blocks[j1]
@@ -195,7 +198,6 @@ class SyncManager:
                             batch_updates.append(update)
                             continue
                     
-                    # Fallback: delete and add
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
                 elif tag == 'delete':
@@ -203,7 +205,6 @@ class SyncManager:
                 elif tag == 'insert':
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
             
-            # Execute batch updates if any
             if batch_updates:
                 logger.info(f"执行 {len(batch_updates)} 个块内容更新...", icon="✏️")
                 result = self.client.batch_update_blocks(self.doc_token, batch_updates)
@@ -213,24 +214,17 @@ class SyncManager:
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
 
     def _try_update_block_content(self, cloud_block: Dict, local_block: Dict) -> Optional[Dict]:
-        """Try to create an update request if block types match.
-        
-        Returns an update request dict for batch_update_blocks, or None if
-        the blocks are incompatible for in-place update.
-        """
+        """Try to create an update request if block types match."""
         cloud_type = cloud_block.get("block_type")
         local_type = local_block.get("block_type")
         
-        # Only update if block types match
         if cloud_type != local_type:
             return None
         
-        # Get block ID from cloud block
         block_id = cloud_block.get("block_id")
         if not block_id:
             return None
         
-        # Supported text-based block types for content update
         TEXT_BLOCK_TYPES = {
             2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
             6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
@@ -240,16 +234,14 @@ class SyncManager:
         
         field_name = TEXT_BLOCK_TYPES.get(cloud_type)
         if not field_name:
-            return None  # Not a text-based block
+            return None
         
-        # Get elements from local block
         local_data = local_block.get(field_name, {})
         elements = local_data.get("elements", [])
         
         if not elements:
             return None
         
-        # Build update request
         update_request = {
             "block_id": block_id,
             "update_text_elements": {
@@ -265,16 +257,13 @@ class SyncManager:
         if not path or path.startswith("http"):
             return None
         
-        # URL decode first (e.g., %E4%B8%AD%E6%96%87.png -> 中文.png)
         decoded_path = unquote(path)
         
-        # Use ResourceIndex for efficient lookup
         if SyncManager._resource_index:
             real_path = SyncManager._resource_index.find(decoded_path)
             if real_path and os.path.exists(real_path):
                 return real_path
         
-        # Fallback: try path relative to current file
         md_dir = os.path.dirname(self.md_path)
         candidate = os.path.join(md_dir, decoded_path)
         if os.path.exists(candidate):
@@ -287,7 +276,11 @@ class SyncManager:
         try:
             blocks = self.client.list_document_blocks(self.doc_token)
             blocks = [b for b in blocks if b.block_type != 1]
-            converter = FeishuToMarkdown(image_downloader=lambda t: self.client.download_image(t, os.path.join(os.path.dirname(self.md_path), "assets", f"{t}.png")))
+            converter = FeishuToMarkdown(
+                image_downloader=lambda t: self.client.download_image(
+                    t, os.path.join(os.path.dirname(self.md_path), "assets", f"{t}.png")
+                )
+            )
             md_content = converter.convert(blocks)
             if os.path.exists(self.md_path):
                 bak_path = f"{self.md_path}.bak.{self.batch_id}"
@@ -296,13 +289,15 @@ class SyncManager:
                 f.write(md_content)
             return SyncResult.SUCCESS
         except Exception as e:
-            logger.error(f"Download failed: {e}"); return SyncResult.ERROR
+            logger.error(f"Download failed: {e}")
+            return SyncResult.ERROR
 
     def verify_cloud_structure(self):
         logger.debug(f"正在拉取云端结构进行验证 ({self.doc_token})...")
         try:
             blocks = self.client.list_document_blocks(self.doc_token)
             block_map = {b.block_id: b for b in blocks}
+            
             def print_tree(block_id, depth=0):
                 b = block_map.get(block_id)
                 if not b: return
@@ -311,173 +306,19 @@ class SyncManager:
                 try:
                     json_str = lark.JSON.marshal(b)
                     d = json.loads(json_str)
-                    for k in ['text', 'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'heading7', 'heading8', 'heading9', 'bullet', 'ordered', 'todo', 'code']:
+                    for k in ['text', 'heading1', 'heading2', 'heading3', 'heading4', 
+                              'heading5', 'heading6', 'heading7', 'heading8', 'heading9', 
+                              'bullet', 'ordered', 'todo', 'code']:
                         if k in d and d[k]:
                             els = d[k].get('elements', [])
                             content = "".join([e.get('text_run', {}).get('content', '') for e in els]).strip()
                             break
                 except: pass
-                logger.debug(f"{indent}- [{b.block_type}] {content}") 
+                logger.debug(f"{indent}- [{b.block_type}] {content}")
+            
             root = next((b for b in blocks if b.block_type == 1), None)
             if root and root.children:
-                for child_id in root.children: print_tree(child_id, 1)
+                for child_id in root.children:
+                    print_tree(child_id, 1)
         except Exception as e:
             logger.error(f"Verification failed: {e}")
-
-class FolderSyncManager:
-    """Manages folder-level synchronization with concurrent file processing."""
-    
-    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, 
-                 vault_root: str = None, debug: bool = False, client: FeishuClient = None):
-        self.local_root = local_root
-        self.cloud_root_token = cloud_root_token
-        self.force = force
-        self.vault_root = vault_root or local_root
-        self.debug = debug
-        self.batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if client:
-            self.client = client
-        else:
-            self.client = FeishuClient(config.FEISHU_APP_ID, config.FEISHU_APP_SECRET, user_access_token=config.FEISHU_USER_ACCESS_TOKEN)
-        self.stats = {"created": 0, "updated": 0, "skipped": 0, "failed": 0}
-        self._stats_lock = None  # Will be initialized in run()
-
-    def run(self):
-        """Run folder synchronization with concurrent file processing."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
-        
-        self._stats_lock = threading.Lock()
-        
-        logger.header(f"开始文件夹同步: {self.local_root} -> {self.cloud_root_token}", icon="🚀")
-        
-        # Collect all sync tasks first
-        sync_tasks = self._collect_sync_tasks(self.local_root, self.cloud_root_token)
-        
-        if not sync_tasks:
-            logger.info("没有需要同步的文件。", icon="✓")
-            return
-        
-        logger.info(f"发现 {len(sync_tasks)} 个文件需要同步，使用 {config.MAX_PARALLEL_WORKERS} 个并行工作线程...", icon="⚡")
-        
-        # Process sync tasks in parallel with progress bar
-        with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_WORKERS) as executor:
-            futures = {executor.submit(self._execute_sync_task, task): task for task in sync_tasks}
-            
-            with logger.progress(len(sync_tasks), "🔄 同步进度") as update:
-                for future in as_completed(futures):
-                    task = futures[future]
-                    try:
-                        result = future.result()
-                        with self._stats_lock:
-                            if result == "created":
-                                self.stats["created"] += 1
-                            elif result == "updated":
-                                self.stats["updated"] += 1
-                            elif result == "failed":
-                                self.stats["failed"] += 1
-                    except Exception as e:
-                        logger.error(f"同步任务失败: {task['local_path']}: {e}")
-                        with self._stats_lock:
-                            self.stats["failed"] += 1
-                    finally:
-                        update(1)  # Update progress bar
-        
-        # Display summary table
-        logger.summary_table("📊 同步汇总", {
-            "✅ 新增": self.stats['created'],
-            "🔄 更新": self.stats['updated'],
-            "⏭️ 跳过": self.stats['skipped'],
-            "❌ 失败": self.stats['failed']
-        })
-
-    def _collect_sync_tasks(self, local_path: str, cloud_token: str) -> List[Dict[str, Any]]:
-        """Recursively collect all sync tasks from folder."""
-        tasks = []
-        
-        try:
-            local_items = os.listdir(local_path)
-        except OSError as e:
-            logger.error(f"无法读取目录 {local_path}: {e}")
-            return tasks
-        
-        cloud_files = self.client.list_folder_files(cloud_token)
-        cloud_map = {f.name: f for f in cloud_files}
-        
-        # Track usage to identify deletions
-        used_cloud_tokens = set()
-
-        for item in local_items:
-            if item.startswith('.') or item == "assets":
-                continue
-            
-            item_path = os.path.join(local_path, item)
-            
-            if os.path.isdir(item_path):
-                # Handle subdirectories
-                if item in cloud_map and cloud_map[item].type == "folder":
-                    used_cloud_tokens.add(cloud_map[item].token)
-                    # Recursively collect from existing folder
-                    tasks.extend(self._collect_sync_tasks(item_path, cloud_map[item].token))
-                else:
-                    # Create new folder and recurse
-                    new_token = self.client.create_folder(cloud_token, item)
-                    if new_token:
-                        tasks.extend(self._collect_sync_tasks(item_path, new_token))
-                        
-            elif item.endswith(".md"):
-                doc_name = item[:-3]
-                if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
-                    used_cloud_tokens.add(cloud_map[doc_name].token)
-                    tasks.append({
-                        "local_path": item_path,
-                        "doc_token": cloud_map[doc_name].token,
-                        "is_new": False
-                    })
-                else:
-                    # Create new document
-                    new_token = self.client.create_docx(cloud_token, doc_name)
-                    if new_token:
-                        tasks.append({
-                            "local_path": item_path,
-                            "doc_token": new_token,
-                            "is_new": True
-                        })
-                    else:
-                        with self._stats_lock:
-                            self.stats["failed"] += 1
-        
-        # Prune deleted files/folders in Cloud
-        for name, file in cloud_map.items():
-            if file.token not in used_cloud_tokens:
-                # Protect specific folders
-                if name in ["DocSync_Assets", "assets", ".Trash"]:
-                    continue
-                
-                logger.info(f"本地不存在 '{name}'，正在从云端删除...", icon="🗑️")
-                # Determine the correct type for deletion API
-                delete_type = file.type if file.type in ["docx", "folder", "file", "sheet", "bitable"] else "docx"
-                if self.client.delete_file(file.token, file_type=delete_type):
-                    pass
-                else:
-                    logger.warning(f"删除失败: {name}")
-
-        return tasks
-
-    def _execute_sync_task(self, task: Dict[str, Any]) -> str:
-        """Execute a single sync task. Returns 'created', 'updated', or 'failed'."""
-        try:
-            sync = SyncManager(
-                task["local_path"], 
-                task["doc_token"], 
-                force=self.force or task["is_new"],
-                vault_root=self.vault_root, 
-                client=self.client, 
-                batch_id=self.batch_id
-            )
-            sync.run(debug=self.debug)
-            return "created" if task["is_new"] else "updated"
-        except Exception as e:
-            logger.error(f"同步失败 {os.path.basename(task['local_path'])}: {e}")
-            return "failed"
-
