@@ -464,6 +464,110 @@ class FeishuClient:
         
         return None
 
+    def convert_content_to_blocks(self, content: str, 
+                                   content_type: str = "markdown") -> Optional[Dict[str, Any]]:
+        """Convert Markdown/HTML content to Feishu document blocks.
+        
+        This uses the official Feishu API to convert content, which can be
+        used with create_block_children to insert content into documents.
+        
+        Args:
+            content: The Markdown or HTML content to convert
+            content_type: Either "markdown" or "html"
+        
+        Returns:
+            Dict with:
+                - first_level_block_ids: List of top-level block IDs
+                - blocks: List of all blocks with parent-child relationships
+            Or None if conversion failed
+            
+        Note:
+            - Table blocks will have merge_info that must be removed before
+              inserting with create_block_children
+            - Image blocks need additional upload steps after insertion
+            - Maximum content length is 10485760 characters
+            
+        Example:
+            # Convert Markdown to blocks
+            result = client.convert_content_to_blocks('''
+            # Hello World
+            
+            This is **bold** and *italic*.
+            
+            - Item 1
+            - Item 2
+            ''')
+            
+            # Then insert to document (remove merge_info from tables first)
+            blocks = result["blocks"]
+            client.create_block_children(doc_id, doc_id, blocks)
+        """
+        self._rate_limit()
+        
+        url = "https://open.feishu.cn/open-apis/docx/v1/documents/blocks/convert"
+        
+        token = self.user_access_token or self._get_tenant_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        
+        body = {
+            "content_type": content_type,
+            "content": content
+        }
+        
+        max_retries = API_MAX_RETRIES
+        retry_delay = API_RETRY_BASE_DELAY
+        
+        for attempt in range(max_retries):
+            try:
+                resp = requests_module.post(url, headers=headers, json=body)
+                
+                if resp.status_code == 429:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Rate limited (429), retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        logger.error(f"Rate limited after {max_retries} retries")
+                        return None
+                
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    
+                    if res_json.get("code") == 99991400:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Rate limited (99991400), retrying...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                            continue
+                        else:
+                            logger.error(f"Rate limited after {max_retries} retries")
+                            return None
+                    
+                    if res_json.get("code") == 0:
+                        data = res_json.get("data", {})
+                        result = {
+                            "first_level_block_ids": data.get("first_level_block_ids", []),
+                            "blocks": data.get("blocks", [])
+                        }
+                        logger.debug(f"Converted content to {len(result['blocks'])} blocks")
+                        return result
+                    else:
+                        logger.error(f"Convert content failed: code={res_json.get('code')}, msg={res_json.get('msg')}")
+                        return None
+                else:
+                    logger.error(f"Convert content HTTP error: {resp.status_code}")
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Convert content exception: {e}")
+                return None
+        
+        return None
+
     def batch_update_blocks(self, document_id: str, 
                             requests: List[Dict[str, Any]]) -> Optional[List[Dict]]:
         """Batch update multiple blocks in a single API call.

@@ -545,3 +545,123 @@ class TestDeleteBlockChildren:
         
         assert result is not None
         assert result["document_revision_id"] == 7
+
+
+class TestConvertContentToBlocks:
+    """Test convert_content_to_blocks method."""
+    
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock FeishuClient."""
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark_client = MagicMock()
+            mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
+            
+            from src.feishu_client import FeishuClient
+            client = FeishuClient("test_id", "test_secret", "test_token")
+            client.client = mock_lark_client
+            yield client
+    
+    def test_convert_markdown_success(self, mock_client):
+        """Test successful Markdown conversion."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "first_level_block_ids": ["block1", "block2"],
+                    "blocks": [
+                        {"block_id": "block1", "block_type": 3, "heading1": {}},
+                        {"block_id": "block2", "block_type": 2, "text": {}}
+                    ]
+                }
+            }
+            mock_requests.post.return_value = mock_response
+            
+            result = mock_client.convert_content_to_blocks("# Hello\n\nWorld")
+            
+            assert result is not None
+            assert len(result["first_level_block_ids"]) == 2
+            assert len(result["blocks"]) == 2
+    
+    def test_convert_html_content(self, mock_client):
+        """Test HTML content conversion."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "first_level_block_ids": ["block1"],
+                    "blocks": [{"block_id": "block1", "block_type": 2}]
+                }
+            }
+            mock_requests.post.return_value = mock_response
+            
+            result = mock_client.convert_content_to_blocks(
+                "<p>Hello <strong>World</strong></p>",
+                content_type="html"
+            )
+            
+            assert result is not None
+            mock_requests.post.assert_called_once()
+    
+    def test_convert_with_table(self, mock_client):
+        """Test conversion with table content."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "first_level_block_ids": ["table1"],
+                    "blocks": [
+                        {"block_id": "table1", "block_type": 31, "table": {"merge_info": {}}},
+                        {"block_id": "cell1", "block_type": 32}
+                    ]
+                }
+            }
+            mock_requests.post.return_value = mock_response
+            
+            result = mock_client.convert_content_to_blocks("|A|B|\n|--|--|\n|1|2|")
+            
+            assert result is not None
+            assert len(result["blocks"]) == 2
+    
+    def test_convert_failure(self, mock_client):
+        """Test handling of conversion failure."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 1770001,
+                "msg": "invalid param"
+            }
+            mock_requests.post.return_value = mock_response
+            
+            result = mock_client.convert_content_to_blocks("")
+            
+            assert result is None
+    
+    def test_convert_rate_limit_retry(self, mock_client):
+        """Test rate limit retry logic."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response_429 = Mock()
+            mock_response_429.status_code = 429
+            
+            mock_response_ok = Mock()
+            mock_response_ok.status_code = 200
+            mock_response_ok.json.return_value = {
+                "code": 0,
+                "data": {
+                    "first_level_block_ids": ["block1"],
+                    "blocks": [{"block_id": "block1"}]
+                }
+            }
+            
+            mock_requests.post.side_effect = [mock_response_429, mock_response_ok]
+            
+            result = mock_client.convert_content_to_blocks("# Test")
+            
+            assert result is not None
