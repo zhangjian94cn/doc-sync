@@ -360,27 +360,36 @@ class FolderSyncManager:
         
         logger.info(f"发现 {len(sync_tasks)} 个文件需要同步，使用 {config.MAX_PARALLEL_WORKERS} 个并行工作线程...", icon="⚡")
         
-        # Process sync tasks in parallel
+        # Process sync tasks in parallel with progress bar
         with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_WORKERS) as executor:
             futures = {executor.submit(self._execute_sync_task, task): task for task in sync_tasks}
             
-            for future in as_completed(futures):
-                task = futures[future]
-                try:
-                    result = future.result()
-                    with self._stats_lock:
-                        if result == "created":
-                            self.stats["created"] += 1
-                        elif result == "updated":
-                            self.stats["updated"] += 1
-                        elif result == "failed":
+            with logger.progress(len(sync_tasks), "🔄 同步进度") as update:
+                for future in as_completed(futures):
+                    task = futures[future]
+                    try:
+                        result = future.result()
+                        with self._stats_lock:
+                            if result == "created":
+                                self.stats["created"] += 1
+                            elif result == "updated":
+                                self.stats["updated"] += 1
+                            elif result == "failed":
+                                self.stats["failed"] += 1
+                    except Exception as e:
+                        logger.error(f"同步任务失败: {task['local_path']}: {e}")
+                        with self._stats_lock:
                             self.stats["failed"] += 1
-                except Exception as e:
-                    logger.error(f"同步任务失败: {task['local_path']}: {e}")
-                    with self._stats_lock:
-                        self.stats["failed"] += 1
+                    finally:
+                        update(1)  # Update progress bar
         
-        logger.info(f"同步汇总: 新增 {self.stats['created']}, 更新 {self.stats['updated']}, 跳过 {self.stats['skipped']}, 失败 {self.stats['failed']}", icon="📊")
+        # Display summary table
+        logger.summary_table("📊 同步汇总", {
+            "✅ 新增": self.stats['created'],
+            "🔄 更新": self.stats['updated'],
+            "⏭️ 跳过": self.stats['skipped'],
+            "❌ 失败": self.stats['failed']
+        })
 
     def _collect_sync_tasks(self, local_path: str, cloud_token: str) -> List[Dict[str, Any]]:
         """Recursively collect all sync tasks from folder."""
