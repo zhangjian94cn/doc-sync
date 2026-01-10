@@ -154,3 +154,47 @@ class TestUpdateBlockText:
         result = mock_client.update_block_text("doc123", "block456", [])
         
         assert result is True
+
+
+class TestGetBlock:
+    """Test get_block method."""
+    
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock FeishuClient."""
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark_client = MagicMock()
+            mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
+            mock_lark.JSON.marshal.return_value = '{"block_type": 2, "text": {"elements": []}}'
+            
+            from src.feishu_client import FeishuClient
+            client = FeishuClient("test_id", "test_secret", "test_token")
+            client.client = mock_lark_client
+            yield client
+    
+    def test_get_block_success(self, mock_client):
+        """Test successful block retrieval."""
+        mock_response = Mock()
+        mock_response.success.return_value = True
+        mock_response.data.block = Mock()
+        mock_client.client.docx.v1.document_block.get.return_value = mock_response
+        
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark.JSON.marshal.return_value = '{"block_type": 2, "text": {"elements": [{"text_run": {"content": "Hello"}}]}}'
+            
+            result = mock_client.get_block("doc123", "block456")
+        
+        assert result is not None
+        mock_client.client.docx.v1.document_block.get.assert_called_once()
+    
+    def test_get_block_failure(self, mock_client):
+        """Test handling of API failure."""
+        mock_response = Mock()
+        mock_response.success.return_value = False
+        mock_response.code = 404
+        mock_response.msg = "Block not found"
+        mock_client.client.docx.v1.document_block.get.return_value = mock_response
+        
+        result = mock_client.get_block("doc123", "block456")
+        
+        assert result is None

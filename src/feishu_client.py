@@ -237,6 +237,41 @@ class FeishuClient:
             logger.error(f"Update block text exception: {e}")
             return False
 
+    def get_block(self, document_id: str, block_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single block's content by its ID.
+        
+        Args:
+            document_id: Document ID
+            block_id: Block ID to retrieve
+        
+        Returns:
+            Dict containing block data, or None if failed
+        """
+        from lark_oapi.api.docx.v1 import GetDocumentBlockRequest
+        
+        self._rate_limit()
+        
+        try:
+            request = GetDocumentBlockRequest.builder() \
+                .document_id(document_id) \
+                .block_id(block_id) \
+                .document_revision_id(-1) \
+                .build()
+            
+            response = self.client.docx.v1.document_block.get(request, self._get_request_option())
+            
+            if response.success():
+                # Convert to dict
+                block_data = json.loads(lark.JSON.marshal(response.data.block))
+                return block_data
+            else:
+                logger.error(f"Get block failed: code={response.code}, msg={response.msg}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Get block exception: {e}")
+            return None
+
     def upload_image(self, file_path: str, parent_node_token: str, drive_route_token: str = None) -> Optional[str]:
         if not os.path.exists(file_path): return None
         
