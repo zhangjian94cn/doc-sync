@@ -178,15 +178,85 @@ class SyncManager:
             self.client.add_blocks(self.doc_token, local_blocks)
         else:
             logger.info(f"差异分析: 发现 {ops_count} 处变更。使用增量同步...", icon="📊")
+            
+            # Track batch updates for efficiency
+            batch_updates = []
+            
             for tag, i1, i2, j1, j2 in reversed(opcodes):
                 if tag == 'replace':
+                    # Try to update in-place if block types match (1:1 replace)
+                    if i2 - i1 == 1 and j2 - j1 == 1:
+                        update = self._try_update_block_content(
+                            root_children[i1], local_blocks[j1]
+                        )
+                        if update:
+                            batch_updates.append(update)
+                            continue
+                    
+                    # Fallback: delete and add
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
                 elif tag == 'delete':
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                 elif tag == 'insert':
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
+            
+            # Execute batch updates if any
+            if batch_updates:
+                logger.info(f"执行 {len(batch_updates)} 个块内容更新...", icon="✏️")
+                result = self.client.batch_update_blocks(self.doc_token, batch_updates)
+                if result:
+                    logger.debug(f"批量更新成功: {len(result)} 个块")
+        
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
+
+    def _try_update_block_content(self, cloud_block: Dict, local_block: Dict) -> Optional[Dict]:
+        """Try to create an update request if block types match.
+        
+        Returns an update request dict for batch_update_blocks, or None if
+        the blocks are incompatible for in-place update.
+        """
+        cloud_type = cloud_block.get("block_type")
+        local_type = local_block.get("block_type")
+        
+        # Only update if block types match
+        if cloud_type != local_type:
+            return None
+        
+        # Get block ID from cloud block
+        block_id = cloud_block.get("block_id")
+        if not block_id:
+            return None
+        
+        # Supported text-based block types for content update
+        TEXT_BLOCK_TYPES = {
+            2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
+            6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
+            10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
+            14: "code", 15: "quote", 17: "todo"
+        }
+        
+        field_name = TEXT_BLOCK_TYPES.get(cloud_type)
+        if not field_name:
+            return None  # Not a text-based block
+        
+        # Get elements from local block
+        local_data = local_block.get(field_name, {})
+        elements = local_data.get("elements", [])
+        
+        if not elements:
+            return None
+        
+        # Build update request
+        update_request = {
+            "block_id": block_id,
+            "update_text_elements": {
+                "elements": elements
+            }
+        }
+        
+        logger.debug(f"准备更新块 {block_id[:15]}... 类型={cloud_type}")
+        return update_request
 
     def _resource_uploader(self, path: str) -> Optional[str]:
         """Resolve resource path using the cached index."""

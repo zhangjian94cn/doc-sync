@@ -89,3 +89,130 @@ class TestSyncV2(unittest.TestCase):
         
         # 2. deleted should be deleted from cloud
         client.delete_file.assert_called_once_with("token_deleted", file_type="docx")
+
+
+class TestIncrementalSync(unittest.TestCase):
+    """Test incremental sync block update functionality."""
+    
+    def setUp(self):
+        self.patcher = patch('src.feishu_client.lark')
+        self.mock_lark = self.patcher.start()
+        
+    def tearDown(self):
+        self.patcher.stop()
+    
+    def test_try_update_block_content_matching_types(self):
+        """Test that matching block types generate update requests."""
+        from src.sync import SyncManager
+        
+        with patch('src.sync.config'):
+            manager = SyncManager.__new__(SyncManager)
+            manager.client = MagicMock()
+            manager.doc_token = "test_doc"
+        
+            cloud_block = {
+                "block_id": "cloud_block_123",
+                "block_type": 2,  # text
+                "text": {"elements": [{"text_run": {"content": "old content"}}]}
+            }
+            
+            local_block = {
+                "block_type": 2,  # text
+                "text": {"elements": [{"text_run": {"content": "new content"}}]}
+            }
+            
+            result = manager._try_update_block_content(cloud_block, local_block)
+            
+            self.assertIsNotNone(result)
+            self.assertEqual(result["block_id"], "cloud_block_123")
+            self.assertIn("update_text_elements", result)
+    
+    def test_try_update_block_content_different_types(self):
+        """Test that different block types return None (no update)."""
+        from src.sync import SyncManager
+        
+        with patch('src.sync.config'):
+            manager = SyncManager.__new__(SyncManager)
+            manager.client = MagicMock()
+            manager.doc_token = "test_doc"
+        
+            cloud_block = {
+                "block_id": "cloud_block_123",
+                "block_type": 2,  # text
+                "text": {"elements": [{"text_run": {"content": "content"}}]}
+            }
+            
+            local_block = {
+                "block_type": 3,  # heading1 - different from cloud
+                "heading1": {"elements": [{"text_run": {"content": "heading"}}]}
+            }
+            
+            result = manager._try_update_block_content(cloud_block, local_block)
+            
+            self.assertIsNone(result)
+    
+    def test_try_update_block_content_heading_types(self):
+        """Test update for heading block types."""
+        from src.sync import SyncManager
+        
+        with patch('src.sync.config'):
+            manager = SyncManager.__new__(SyncManager)
+            manager.client = MagicMock()
+            manager.doc_token = "test_doc"
+            
+            for heading_num in range(1, 10):
+                block_type = 2 + heading_num  # heading1=3, heading2=4, etc.
+                field_name = f"heading{heading_num}"
+                
+                cloud_block = {
+                    "block_id": f"heading_{heading_num}_id",
+                    "block_type": block_type,
+                    field_name: {"elements": [{"text_run": {"content": "old"}}]}
+                }
+                
+                local_block = {
+                    "block_type": block_type,
+                    field_name: {"elements": [{"text_run": {"content": "new"}}]}
+                }
+                
+                result = manager._try_update_block_content(cloud_block, local_block)
+                
+                self.assertIsNotNone(result, f"Failed for heading{heading_num}")
+                self.assertEqual(result["block_id"], f"heading_{heading_num}_id")
+    
+    def test_try_update_block_content_list_types(self):
+        """Test update for bullet and ordered list types."""
+        from src.sync import SyncManager
+        
+        with patch('src.sync.config'):
+            manager = SyncManager.__new__(SyncManager)
+            manager.client = MagicMock()
+            manager.doc_token = "test_doc"
+            
+            # Test bullet list (type 12)
+            cloud_block = {
+                "block_id": "bullet_id",
+                "block_type": 12,
+                "bullet": {"elements": [{"text_run": {"content": "old item"}}]}
+            }
+            local_block = {
+                "block_type": 12,
+                "bullet": {"elements": [{"text_run": {"content": "new item"}}]}
+            }
+            
+            result = manager._try_update_block_content(cloud_block, local_block)
+            self.assertIsNotNone(result)
+            
+            # Test ordered list (type 13)
+            cloud_block = {
+                "block_id": "ordered_id",
+                "block_type": 13,
+                "ordered": {"elements": [{"text_run": {"content": "old item"}}]}
+            }
+            local_block = {
+                "block_type": 13,
+                "ordered": {"elements": [{"text_run": {"content": "new item"}}]}
+            }
+            
+            result = manager._try_update_block_content(cloud_block, local_block)
+            self.assertIsNotNone(result)
