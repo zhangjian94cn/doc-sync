@@ -272,6 +272,110 @@ class FeishuClient:
             logger.error(f"Get block exception: {e}")
             return None
 
+    def get_block_children(self, document_id: str, block_id: str,
+                           page_size: int = 500,
+                           with_descendants: bool = False) -> Optional[List[Dict[str, Any]]]:
+        """Get all children blocks of a specified block.
+        
+        This method handles pagination automatically and returns all children.
+        
+        Args:
+            document_id: Document ID
+            block_id: Block ID to get children from (use document_id for root block)
+            page_size: Number of items per page (max 500, default 500)
+            with_descendants: If True, returns all descendant blocks recursively
+                             using pre-order traversal. If False, returns only
+                             direct children.
+        
+        Returns:
+            List of block dicts, or None if failed
+            
+        Example:
+            # Get all direct children of root block
+            children = client.get_block_children("doc_id", "doc_id")
+            
+            # Get all descendants of a table block
+            all_blocks = client.get_block_children("doc_id", "table_block_id", 
+                                                   with_descendants=True)
+        """
+        all_items = []
+        page_token = None
+        
+        while True:
+            self._rate_limit()
+            
+            url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks/{block_id}/children"
+            
+            params = {
+                "document_revision_id": -1,
+                "page_size": min(page_size, 500)
+            }
+            
+            if page_token:
+                params["page_token"] = page_token
+            if with_descendants:
+                params["with_descendants"] = "true"
+            
+            token = self.user_access_token or self._get_tenant_access_token()
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            max_retries = API_MAX_RETRIES
+            retry_delay = API_RETRY_BASE_DELAY
+            
+            for attempt in range(max_retries):
+                try:
+                    resp = requests_module.get(url, headers=headers, params=params)
+                    
+                    if resp.status_code == 429:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Rate limited (429), retrying in {retry_delay}s...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                            continue
+                        else:
+                            logger.error(f"Rate limited after {max_retries} retries")
+                            return None
+                    
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+                        
+                        if res_json.get("code") == 99991400:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"Rate limited (99991400), retrying...")
+                                time.sleep(retry_delay)
+                                retry_delay *= 2
+                                continue
+                            else:
+                                logger.error(f"Rate limited after {max_retries} retries")
+                                return None
+                        
+                        if res_json.get("code") == 0:
+                            items = res_json.get("data", {}).get("items", [])
+                            all_items.extend(items)
+                            
+                            # Check for more pages
+                            page_token = res_json.get("data", {}).get("page_token")
+                            if not page_token:
+                                logger.debug(f"Retrieved {len(all_items)} child blocks")
+                                return all_items
+                            break  # Continue to next page
+                        else:
+                            logger.error(f"Get block children failed: code={res_json.get('code')}, msg={res_json.get('msg')}")
+                            return None
+                    else:
+                        logger.error(f"Get block children HTTP error: {resp.status_code}")
+                        return None
+                        
+                except Exception as e:
+                    logger.error(f"Get block children exception: {e}")
+                    return None
+            
+            # If we got here without page_token, we're done
+            if not page_token:
+                break
+        
+        return all_items
+
     def batch_update_blocks(self, document_id: str, 
                             requests: List[Dict[str, Any]]) -> Optional[List[Dict]]:
         """Batch update multiple blocks in a single API call.

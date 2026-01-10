@@ -334,3 +334,135 @@ class TestBatchUpdateBlocks:
             # Should succeed after retry
             assert result is not None
 
+
+class TestGetBlockChildren:
+    """Test get_block_children method."""
+    
+    @pytest.fixture
+    def mock_client(self):
+        """Create a mock FeishuClient."""
+        with patch('src.feishu_client.lark') as mock_lark:
+            mock_lark_client = MagicMock()
+            mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
+            
+            from src.feishu_client import FeishuClient
+            client = FeishuClient("test_id", "test_secret", "test_token")
+            client.client = mock_lark_client
+            yield client
+    
+    def test_get_children_success(self, mock_client):
+        """Test successful retrieval of child blocks."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "items": [
+                        {"block_id": "block1", "block_type": 2},
+                        {"block_id": "block2", "block_type": 3}
+                    ]
+                }
+            }
+            mock_requests.get.return_value = mock_response
+            
+            result = mock_client.get_block_children("doc123", "doc123")
+            
+            assert result is not None
+            assert len(result) == 2
+            assert result[0]["block_id"] == "block1"
+    
+    def test_get_children_with_descendants(self, mock_client):
+        """Test retrieval with descendants flag."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "items": [
+                        {"block_id": "table1", "block_type": 31},
+                        {"block_id": "cell1", "block_type": 32},
+                        {"block_id": "text1", "block_type": 2},
+                        {"block_id": "cell2", "block_type": 32}
+                    ]
+                }
+            }
+            mock_requests.get.return_value = mock_response
+            
+            result = mock_client.get_block_children(
+                "doc123", "table_block_id", with_descendants=True
+            )
+            
+            assert result is not None
+            assert len(result) == 4
+            # Verify params include with_descendants
+            mock_requests.get.assert_called_once()
+    
+    def test_get_children_pagination(self, mock_client):
+        """Test pagination handling."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            # First page with page_token
+            page1_response = Mock()
+            page1_response.status_code = 200
+            page1_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "items": [{"block_id": "block1"}],
+                    "page_token": "next_page_token"
+                }
+            }
+            
+            # Second page without page_token
+            page2_response = Mock()
+            page2_response.status_code = 200
+            page2_response.json.return_value = {
+                "code": 0,
+                "data": {
+                    "items": [{"block_id": "block2"}]
+                }
+            }
+            
+            mock_requests.get.side_effect = [page1_response, page2_response]
+            
+            result = mock_client.get_block_children("doc123", "doc123")
+            
+            assert result is not None
+            assert len(result) == 2
+            assert mock_requests.get.call_count == 2
+    
+    def test_get_children_failure(self, mock_client):
+        """Test handling of API failure."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "code": 500,
+                "msg": "Internal error"
+            }
+            mock_requests.get.return_value = mock_response
+            
+            result = mock_client.get_block_children("doc123", "doc123")
+            
+            assert result is None
+    
+    def test_get_children_rate_limit_retry(self, mock_client):
+        """Test rate limit retry logic."""
+        with patch('src.feishu_client.requests_module') as mock_requests:
+            # First call returns rate limit, second succeeds
+            mock_response_429 = Mock()
+            mock_response_429.status_code = 429
+            
+            mock_response_ok = Mock()
+            mock_response_ok.status_code = 200
+            mock_response_ok.json.return_value = {
+                "code": 0,
+                "data": {"items": [{"block_id": "block1"}]}
+            }
+            
+            mock_requests.get.side_effect = [mock_response_429, mock_response_ok]
+            
+            result = mock_client.get_block_children("doc123", "doc123")
+            
+            assert result is not None
+            assert len(result) == 1
