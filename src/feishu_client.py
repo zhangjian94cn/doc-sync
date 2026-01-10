@@ -131,6 +131,112 @@ class FeishuClient:
         response = self.client.docx.v1.document_block.patch(request, self._get_request_option())
         return response.success()
 
+    def update_block_text(self, document_id: str, block_id: str, 
+                          elements: List[Dict[str, Any]]) -> bool:
+        """Update text block content with rich text elements.
+        
+        Args:
+            document_id: Document ID
+            block_id: Block ID to update
+            elements: List of text elements, e.g.:
+                [
+                    {"text_run": {"content": "Bold text", "text_element_style": {"bold": True}}},
+                    {"mention_user": {"user_id": "ou_xxx"}},
+                    {"mention_doc": {"token": "docxxx", "obj_type": 1, "url": "https://..."}}
+                ]
+        
+        Returns:
+            bool: True if successful
+        """
+        from lark_oapi.api.docx.v1 import (
+            PatchDocumentBlockRequest, UpdateBlockRequest, UpdateTextElementsRequest,
+            TextElement, TextRun, TextElementStyle, MentionUser, MentionDoc, Reminder
+        )
+        
+        self._rate_limit()
+        
+        try:
+            # Build TextElement objects from dicts
+            text_elements = []
+            for elem in elements:
+                te_builder = TextElement.builder()
+                
+                if "text_run" in elem:
+                    tr = elem["text_run"]
+                    tr_builder = TextRun.builder().content(tr.get("content", ""))
+                    
+                    # Apply text styles if present
+                    style = tr.get("text_element_style", {})
+                    if style:
+                        style_builder = TextElementStyle.builder()
+                        if style.get("bold"): style_builder.bold(True)
+                        if style.get("italic"): style_builder.italic(True)
+                        if style.get("strikethrough"): style_builder.strikethrough(True)
+                        if style.get("underline"): style_builder.underline(True)
+                        if style.get("inline_code"): style_builder.inline_code(True)
+                        if "background_color" in style: style_builder.background_color(style["background_color"])
+                        if "text_color" in style: style_builder.text_color(style["text_color"])
+                        tr_builder.text_element_style(style_builder.build())
+                    
+                    te_builder.text_run(tr_builder.build())
+                
+                elif "mention_user" in elem:
+                    mu = elem["mention_user"]
+                    te_builder.mention_user(
+                        MentionUser.builder().user_id(mu.get("user_id", "")).build()
+                    )
+                
+                elif "mention_doc" in elem:
+                    md = elem["mention_doc"]
+                    te_builder.mention_doc(
+                        MentionDoc.builder()
+                            .token(md.get("token", ""))
+                            .obj_type(md.get("obj_type", 1))
+                            .url(md.get("url", ""))
+                            .build()
+                    )
+                
+                elif "reminder" in elem:
+                    rem = elem["reminder"]
+                    te_builder.reminder(
+                        Reminder.builder()
+                            .create_user_id(rem.get("create_user_id", ""))
+                            .expire_time(rem.get("expire_time", ""))
+                            .notify_time(rem.get("notify_time", ""))
+                            .build()
+                    )
+                
+                text_elements.append(te_builder.build())
+            
+            # Build the patch request
+            request = PatchDocumentBlockRequest.builder() \
+                .document_id(document_id) \
+                .block_id(block_id) \
+                .document_revision_id(-1) \
+                .request_body(
+                    UpdateBlockRequest.builder()
+                        .update_text_elements(
+                            UpdateTextElementsRequest.builder()
+                                .elements(text_elements)
+                                .build()
+                        )
+                        .build()
+                ) \
+                .build()
+            
+            response = self.client.docx.v1.document_block.patch(request, self._get_request_option())
+            
+            if response.success():
+                logger.debug(f"Block text updated successfully: {block_id}")
+                return True
+            else:
+                logger.error(f"Update block text failed: code={response.code}, msg={response.msg}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Update block text exception: {e}")
+            return False
+
     def upload_image(self, file_path: str, parent_node_token: str, drive_route_token: str = None) -> Optional[str]:
         if not os.path.exists(file_path): return None
         
