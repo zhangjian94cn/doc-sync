@@ -19,14 +19,20 @@ Usage:
     from src.feishu.media import MediaOperationsMixin
 """
 
-# Re-export FeishuClient for backward compatibility
-from src.feishu_client import FeishuClient
-
-# Export base class and mixins for subclassing
+# Export base class and mixins (no circular import)
 from src.feishu.base import FeishuClientBase
 from src.feishu.blocks import BlockOperationsMixin
 from src.feishu.documents import DocumentOperationsMixin
 from src.feishu.media import MediaOperationsMixin
+
+
+def __getattr__(name):
+    """Lazy import FeishuClient to avoid circular import."""
+    if name == 'FeishuClient':
+        from src.feishu_client import FeishuClient
+        return FeishuClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     'FeishuClient',
@@ -35,3 +41,4 @@ __all__ = [
     'DocumentOperationsMixin',
     'MediaOperationsMixin',
 ]
+

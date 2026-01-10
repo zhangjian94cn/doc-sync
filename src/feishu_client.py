@@ -16,25 +16,28 @@ from lark_oapi.api.drive.v1.model.request_doc import RequestDoc
 from src.logger import logger
 from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
-class FeishuClient:
-    # Rate limiting: max 5 requests per second (飞书 API 限制)
-    _rate_limit_interval = 0.2  # 200ms between requests
-    _last_request_time = 0
-    _rate_limit_lock = threading.Lock()
+# Import base and mixin classes
+from src.feishu.base import FeishuClientBase
+from src.feishu.blocks import BlockOperationsMixin
+from src.feishu.documents import DocumentOperationsMixin
+from src.feishu.media import MediaOperationsMixin
+
+
+class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMixin, MediaOperationsMixin):
+    """
+    Complete Feishu API client with all operations.
+    
+    Inherits from:
+        - FeishuClientBase: Core authentication, rate limiting, caching
+        - BlockOperationsMixin: Block CRUD operations
+        - DocumentOperationsMixin: Document operations
+        - MediaOperationsMixin: Image and file upload/download
+    """
     
     def __init__(self, app_id: str, app_secret: str, user_access_token: str = None):
-        self.app_id = app_id
-        self.app_secret = app_secret
-        self.user_access_token = user_access_token
-        self.client = lark.Client.builder() \
-            .app_id(app_id) \
-            .app_secret(app_secret) \
-            .enable_set_token(True) \
-            .log_level(lark.LogLevel.INFO) \
-            .build()
-        
-        self.asset_cache_path = os.path.join(os.path.expanduser("~"), ".doc_sync", "assets_cache.json")
-        self._asset_cache = self._load_asset_cache()
+        # Call parent __init__
+        super().__init__(app_id, app_secret, user_access_token)
+
     
     def _rate_limit(self):
         """Ensure minimum interval between API requests."""
