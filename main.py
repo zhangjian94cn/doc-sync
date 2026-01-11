@@ -175,7 +175,7 @@ def main():
     
     # Mode: Restore
     if args.restore:
-        from src.restore import run_restore_interactive
+        from src.core.restore import run_restore_interactive
         run_restore_interactive(args.restore)
         return
 
@@ -236,7 +236,7 @@ def main():
                 # 20005: Invalid Access Token (e.g. revoked or malformed)
                 if resp.code == 99991677 or resp.code == 20005: 
                     logger.warning(f"Token 失效 (Code: {resp.code})，尝试自动刷新...")
-                    from src.auth import FeishuAuthenticator
+                    from src.core.auth import FeishuAuthenticator
                     auth = FeishuAuthenticator()
                     new_token = auth.refresh()
                     if new_token:
@@ -251,7 +251,7 @@ def main():
                         logger.error("请运行以下命令重新登录:")
                         logger.error("  python3 scripts/setup_wizard.py")
                         logger.error("或手动运行:")
-                        logger.error("  python3 -c 'from src.auth import FeishuAuthenticator; FeishuAuthenticator().login()'")
+                        logger.error("  python3 -c 'from src.core.auth import FeishuAuthenticator; FeishuAuthenticator().login()'")
                         sys.exit(1)
                 else:
                     # Other errors (e.g. permission denied for user_info) shouldn't block main flow if token is valid?
@@ -271,7 +271,7 @@ def main():
         try:
             choice = input("是否立即登录飞书以获取用户权限? (y/n) [y]: ").lower()
             if choice in ('', 'y'):
-                from src.auth import FeishuAuthenticator
+                from src.core.auth import FeishuAuthenticator
                 auth = FeishuAuthenticator()
                 new_token = auth.login()
                 if new_token:

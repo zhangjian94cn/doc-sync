@@ -154,7 +154,7 @@ class DocumentOperationsMixin:
                 return files
             if resp.data and resp.data.files:
                 files.extend(resp.data.files)
-            page_token = resp.data.page_token if resp.data else None
+            page_token = getattr(resp.data, 'page_token', None) if resp.data else None
             if not page_token:
                 break
         
