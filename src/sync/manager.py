@@ -116,8 +116,9 @@ class SyncManager:
         b_type = block_dict.get("block_type")
         content = ""
         mapping = {
-            2: "text", 12: "bullet", 13: "ordered", 22: "todo", 14: "code",
-            27: "image", 23: "file"
+            2: "text", 12: "bullet", 13: "ordered", 14: "code",
+            15: "quote", 17: "todo", 27: "image", 23: "file"
+            # Note: 22 is divider (no content), 31 is table
         }
         for i in range(1, 10): mapping[2+i] = f"heading{i}"
         
@@ -190,6 +191,7 @@ class SyncManager:
             
             for tag, i1, i2, j1, j2 in reversed(opcodes):
                 if tag == 'replace':
+                    # Try in-place update for 1:1 replacements
                     if i2 - i1 == 1 and j2 - j1 == 1:
                         update = self._try_update_block_content(
                             root_children[i1], local_blocks[j1]
@@ -198,11 +200,15 @@ class SyncManager:
                             batch_updates.append(update)
                             continue
                     
+                    # Fallback: delete and add (including when update returns None)
+                    logger.debug(f"增量删除并添加: 位置 {i1}-{i2} -> {j1}-{j2}")
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
                 elif tag == 'delete':
+                    logger.debug(f"增量删除: 位置 {i1}-{i2}")
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                 elif tag == 'insert':
+                    logger.debug(f"增量插入: 位置 {i1}, 块数 {j2-j1}")
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
             
             if batch_updates:
@@ -210,6 +216,11 @@ class SyncManager:
                 result = self.client.batch_update_blocks(self.doc_token, batch_updates)
                 if result:
                     logger.debug(f"批量更新成功: {len(result)} 个块")
+                else:
+                    # Fallback: if batch update fails, use full overwrite
+                    logger.warning("批量更新失败，使用全量覆盖模式...")
+                    self.client.clear_document(self.doc_token)
+                    self.client.add_blocks(self.doc_token, local_blocks)
         
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
 
