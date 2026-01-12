@@ -56,6 +56,7 @@ class FeishuToMarkdown:
         
         md_lines = []
         prev_type = None
+        is_first_block = True
         
         # Get document root to find top-level blocks
         doc_root = None
@@ -76,7 +77,17 @@ class FeishuToMarkdown:
             block = self.block_map.get(block_id)
             if not block:
                 continue
-                
+            
+            # Check for frontmatter in first Quote block
+            if is_first_block and block.block_type == 15:  # Quote
+                frontmatter = self._try_extract_frontmatter(block)
+                if frontmatter:
+                    md_lines.extend(frontmatter)
+                    is_first_block = False
+                    prev_type = block.block_type
+                    continue
+            
+            is_first_block = False
             lines = self._process_block(block, indent_level=0)
             if lines:
                 # Add blank line before headings (except first)
@@ -88,6 +99,61 @@ class FeishuToMarkdown:
                 md_lines.extend(lines)
         
         return "\n".join(md_lines)
+    
+    def _try_extract_frontmatter(self, quote_block) -> Optional[List[str]]:
+        """Try to extract YAML frontmatter from a quote block.
+        
+        Detects patterns like:
+        > **title: **Value
+        > **date: **2026-01-08
+        > **tags: **[tag1, tag2]
+        
+        Returns frontmatter lines if detected, None otherwise.
+        """
+        text_obj = getattr(quote_block, 'quote', None)
+        if not text_obj or not hasattr(text_obj, 'elements') or not text_obj.elements:
+            return None
+        
+        # Extract raw text content with formatting info
+        elements = text_obj.elements
+        raw_parts = []
+        
+        for elem in elements:
+            if hasattr(elem, 'text_run') and elem.text_run:
+                content = getattr(elem.text_run, 'content', "") or ""
+                style = getattr(elem.text_run, 'text_element_style', None)
+                is_bold = style and getattr(style, 'bold', False)
+                raw_parts.append((content, is_bold))
+        
+        # Try to parse as frontmatter
+        # Pattern: bold "key: " followed by non-bold "value\n"
+        frontmatter_lines = []
+        i = 0
+        while i < len(raw_parts):
+            content, is_bold = raw_parts[i]
+            
+            if is_bold and ': ' in content:
+                # This is a key
+                key = content.rstrip(': ').strip()
+                value = ""
+                
+                # Look for value in next part
+                if i + 1 < len(raw_parts):
+                    next_content, next_bold = raw_parts[i + 1]
+                    if not next_bold:
+                        value = next_content.strip().rstrip('\n')
+                        i += 1
+                
+                if key and value:
+                    frontmatter_lines.append(f"{key}: {value}")
+            
+            i += 1
+        
+        # Only return as frontmatter if we found at least 2 valid key-value pairs
+        if len(frontmatter_lines) >= 2:
+            return ["---"] + frontmatter_lines + ["---"]
+        
+        return None
 
     def _process_block(self, block, indent_level: int = 0) -> List[str]:
         """Process a single block and return list of Markdown lines."""
