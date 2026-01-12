@@ -83,20 +83,36 @@ class FeishuToMarkdown:
                 frontmatter = self._try_extract_frontmatter(block)
                 if frontmatter:
                     md_lines.extend(frontmatter)
+                    md_lines.append("")  # Blank line after frontmatter
                     is_first_block = False
-                    prev_type = block.block_type
+                    prev_type = -1  # Reset to force blank line before next block
                     continue
             
             is_first_block = False
+            curr_type = block.block_type
+            
+            # Add blank lines between different block types for better readability
+            if prev_type is not None:
+                # Add blank line before headings
+                if curr_type in range(3, 12):
+                    md_lines.append("")
+                # Add blank line before paragraphs if previous was not a paragraph
+                elif curr_type == 2 and prev_type != 2:
+                    md_lines.append("")
+                # Add blank line before lists if previous was not a list
+                elif curr_type in (12, 13, 17) and prev_type not in (12, 13, 17):
+                    md_lines.append("")
+                # Add blank line before tables
+                elif curr_type == 31:
+                    md_lines.append("")
+                # Add blank line after lists if current is not a list
+                elif curr_type not in (12, 13, 17) and prev_type in (12, 13, 17):
+                    md_lines.append("")
+            
             lines = self._process_block(block, indent_level=0)
             if lines:
-                # Add blank line before headings (except first)
-                curr_type = block.block_type
-                if curr_type in range(3, 12) and prev_type and prev_type not in range(3, 12):
-                    md_lines.append("")
-                prev_type = curr_type
-                
                 md_lines.extend(lines)
+                prev_type = curr_type
         
         return "\n".join(md_lines)
     
