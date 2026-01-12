@@ -283,22 +283,39 @@ class SyncManager:
         logger.error(f"本地资源未找到: {path}")
         return None
 
+    def _get_obsidian_attachment_folder(self) -> str:
+        """Get attachment folder path from Obsidian's config.
+        
+        Reads .obsidian/app.json and returns attachmentFolderPath setting.
+        Falls back to 'attachments' if not configured.
+        """
+        config_path = os.path.join(self.vault_root, ".obsidian", "app.json")
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    obsidian_config = json.load(f)
+                    return obsidian_config.get("attachmentFolderPath", "attachments")
+        except Exception as e:
+            logger.debug(f"读取 Obsidian 配置失败: {e}")
+        return "attachments"
+
     def _sync_cloud_to_local(self) -> SyncResult:
         try:
             blocks = self.client.list_document_blocks(self.doc_token)
             blocks = [b for b in blocks if b.block_type != 1]
             
-            # Use vault_root/assets for unified asset storage
-            assets_dir = os.path.join(self.vault_root, "assets")
-            os.makedirs(assets_dir, exist_ok=True)
+            # Use Obsidian's configured attachment folder
+            attachment_folder = self._get_obsidian_attachment_folder()
+            attachments_dir = os.path.join(self.vault_root, attachment_folder)
+            os.makedirs(attachments_dir, exist_ok=True)
             
             def download_image(token: str) -> Optional[str]:
                 """Download image and return Obsidian-compatible path."""
-                local_path = os.path.join(assets_dir, f"{token}.png")
+                local_path = os.path.join(attachments_dir, f"{token}.png")
                 result = self.client.download_image(token, local_path)
                 if result:
                     # Return path relative to vault_root for Obsidian
-                    return f"assets/{token}.png"
+                    return f"{attachment_folder}/{token}.png"
                 return None
             
             converter = FeishuToMarkdown(image_downloader=download_image)
