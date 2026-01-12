@@ -98,7 +98,16 @@ class FolderSyncManager:
         used_cloud_tokens = set()
 
         for item in local_items:
-            if item.startswith('.') or item == "assets":
+            # Skip hidden files, attachment directories, and Obsidian-specific files
+            if item.startswith('.'):
+                continue
+            if item in ("assets", "attachments", "_attachments"):
+                continue
+            # Skip Excalidraw files (they won't sync properly to Feishu)
+            if item.endswith(".excalidraw") or item.endswith(".excalidraw.md"):
+                continue
+            # Skip canvas files
+            if item.endswith(".canvas"):
                 continue
             
             item_path = os.path.join(local_path, item)
