@@ -179,12 +179,14 @@ class TestGetBlock:
         mock_response.data.block = Mock()
         mock_client.client.docx.v1.document_block.get.return_value = mock_response
         
-        with patch('src.feishu_client.lark') as mock_lark:
+        # Patch lark in the module where it's actually used
+        with patch('src.feishu.blocks.lark') as mock_lark:
             mock_lark.JSON.marshal.return_value = '{"block_type": 2, "text": {"elements": [{"text_run": {"content": "Hello"}}]}}'
             
             result = mock_client.get_block("doc123", "block456")
         
         assert result is not None
+        assert result["block_type"] == 2
         mock_client.client.docx.v1.document_block.get.assert_called_once()
     
     def test_get_block_failure(self, mock_client):

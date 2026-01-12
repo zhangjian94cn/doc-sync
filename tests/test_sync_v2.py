@@ -18,8 +18,9 @@ class TestSyncV2(unittest.TestCase):
     def test_upload_deduplication(self):
         # Setup
         client = FeishuClient("app", "secret")
-        client._asset_cache = {} # Empty cache
+        client._asset_cache = {}  # Empty cache
         client._save_asset_cache = MagicMock()
+        client.user_access_token = "test_token"  # Avoid _get_tenant_access_token call
         
         # Create dummy file
         with tempfile.NamedTemporaryFile(delete=False) as f:
@@ -27,24 +28,30 @@ class TestSyncV2(unittest.TestCase):
             path = f.name
             
         try:
-            # First upload
-            client.client.drive.v1.media.upload_all = MagicMock()
-            mock_resp = MagicMock()
-            mock_resp.success.return_value = True
-            mock_resp.data.file_token = "token_123"
-            client.client.drive.v1.media.upload_all.return_value = mock_resp
-            
-            token1 = client.upload_file(path, "parent")
-            
-            self.assertEqual(token1, "token_123")
-            self.assertEqual(client.client.drive.v1.media.upload_all.call_count, 1)
-            self.assertEqual(client._save_asset_cache.call_count, 1)
-            
-            # Second upload (same file)
-            token2 = client.upload_file(path, "parent")
-            
-            self.assertEqual(token2, "token_123")
-            self.assertEqual(client.client.drive.v1.media.upload_all.call_count, 1) # Still 1, no new call
+            # Patch requests_module in the actual module where it's used
+            with patch('src.feishu.media.requests_module') as mock_requests:
+                # Setup mock response for first upload
+                mock_resp = MagicMock()
+                mock_resp.status_code = 200
+                mock_resp.json.return_value = {
+                    "code": 0,
+                    "data": {"file_token": "token_123"}
+                }
+                mock_requests.post.return_value = mock_resp
+                
+                # First upload
+                token1 = client.upload_file(path, "parent")
+                
+                self.assertEqual(token1, "token_123")
+                self.assertEqual(mock_requests.post.call_count, 1)
+                self.assertEqual(client._save_asset_cache.call_count, 1)
+                
+                # Second upload (same file) - should use cache
+                token2 = client.upload_file(path, "parent")
+                
+                self.assertEqual(token2, "token_123")
+                # Still 1, no new request because it's cached
+                self.assertEqual(mock_requests.post.call_count, 1)
             
         finally:
             os.remove(path)
