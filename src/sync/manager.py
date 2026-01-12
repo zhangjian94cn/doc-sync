@@ -40,11 +40,12 @@ class SyncManager:
     _resource_index: Optional[ResourceIndex] = None
     _resource_index_root: Optional[str] = None
     
-    def __init__(self, md_path: str, doc_token: str, force: bool = False, 
+    def __init__(self, md_path: str, doc_token: str, force: bool = False, overwrite: bool = False,
                  vault_root: str = None, client: FeishuClient = None, batch_id: str = None):
         self.md_path = os.path.abspath(md_path)
         self.doc_token = doc_token
         self.force = force
+        self.overwrite = overwrite
         self.vault_root = vault_root or os.path.dirname(self.md_path)
         self.batch_id = batch_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -102,7 +103,7 @@ class SyncManager:
                 
             cloud_mtime = parse_cloud_time(file_info.latest_modify_time)
             logger.info(f"云端修改时间: {datetime.fromtimestamp(cloud_mtime)}", icon="☁️ ")
-            if cloud_mtime > local_mtime and not self.force:
+            if cloud_mtime > local_mtime and not self.force and not self.overwrite:
                 logger.info("开始反向同步 (云端 -> 本地)...", icon="🔄")
                 result = self._sync_cloud_to_local()
                 if result == SyncResult.SUCCESS: should_upload = False
@@ -153,6 +154,15 @@ class SyncManager:
         converter = MarkdownToFeishu(image_uploader=lambda p: self._resource_uploader(p))
         local_blocks = converter.parse(md_content)
         logger.info(f"本地已生成 {len(local_blocks)} 个顶层文档块。", icon="✨")
+
+        if self.overwrite:
+            logger.warning("强制全量覆盖模式，正在清空云端文档...", icon="⚠️")
+            self.client.clear_document(self.doc_token)
+            logger.info("正在上传新内容...", icon="📤")
+            # When overwriting, we append to the end (-1) to maintain order correctly
+            self.client.add_blocks(self.doc_token, local_blocks, index=-1)
+            logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
+            return
 
         logger.info("获取云端现有内容以进行比对...", icon="🔍")
         cloud_blocks_flat = self.client.list_document_blocks(self.doc_token)
