@@ -1,8 +1,18 @@
+"""
+Feishu to Markdown Converter
+
+Converts Feishu document blocks to Markdown content with proper handling of:
+- Tables (with nested TableCell -> Text structure)
+- Nested lists (recursive children processing)
+- Rich text styles (bold, italic, code, links, etc.)
+"""
+
 import re
 import os
 from typing import List, Dict, Any, Optional, Callable
 
 from src.logger import logger
+
 
 class FeishuToMarkdown:
     """Convert Feishu document blocks to Markdown content.
@@ -10,55 +20,88 @@ class FeishuToMarkdown:
     Supports:
     - Text blocks (with rich text styles)
     - Headings (1-9 levels)
-    - Bullet and ordered lists
+    - Bullet and ordered lists (with nesting)
     - Todo/checkbox items
     - Code blocks (with language detection)
     - Images (with optional download)
     - Quotes
-    - Tables (basic support)
+    - Tables (full support)
+    - Dividers
     """
     
-    def __init__(self, image_downloader=None):
+    def __init__(self, image_downloader: Optional[Callable[[str], Optional[str]]] = None):
         """Initialize the converter.
         
         Args:
             image_downloader: Optional callback(token) -> local_path for downloading images
         """
         self.image_downloader = image_downloader
-        self.indent_level = 0
+        self.block_map: Dict[str, Any] = {}
     
     def convert(self, blocks: List[Any]) -> str:
-        """Convert a list of Feishu blocks to Markdown."""
+        """Convert a list of Feishu blocks to Markdown.
+        
+        Args:
+            blocks: List of Feishu block objects from API
+            
+        Returns:
+            Markdown string
+        """
+        # Build block map for nested lookups
+        self.block_map = {}
+        for block in blocks:
+            block_id = getattr(block, 'block_id', None)
+            if block_id:
+                self.block_map[block_id] = block
+        
         md_lines = []
         prev_type = None
         
+        # Get document root to find top-level blocks
+        doc_root = None
         for block in blocks:
-            line = self._process_block(block)
-            if line is not None:
-                # Add blank line before headings (except first)
-                if hasattr(block, 'block_type'):
-                    curr_type = block.block_type
-                    if curr_type in range(3, 12) and prev_type and prev_type not in range(3, 12):
-                        md_lines.append("")
-                    prev_type = curr_type
+            if block.block_type == 1:  # Page block
+                doc_root = block
+                break
+        
+        # Process only root-level blocks (direct children of document)
+        root_children_ids = []
+        if doc_root and hasattr(doc_root, 'children') and doc_root.children:
+            root_children_ids = doc_root.children
+        else:
+            # Fallback: process all non-Page blocks
+            root_children_ids = [b.block_id for b in blocks if b.block_type != 1]
+        
+        for block_id in root_children_ids:
+            block = self.block_map.get(block_id)
+            if not block:
+                continue
                 
-                md_lines.append(line)
+            lines = self._process_block(block, indent_level=0)
+            if lines:
+                # Add blank line before headings (except first)
+                curr_type = block.block_type
+                if curr_type in range(3, 12) and prev_type and prev_type not in range(3, 12):
+                    md_lines.append("")
+                prev_type = curr_type
+                
+                md_lines.extend(lines)
         
         return "\n".join(md_lines)
 
-    def _process_block(self, block) -> Optional[str]:
-        """Process a single block and return Markdown string."""
+    def _process_block(self, block, indent_level: int = 0) -> List[str]:
+        """Process a single block and return list of Markdown lines."""
         b_type = block.block_type
-        content = ""
+        lines = []
         text_obj = None
         prefix = ""
         suffix = ""
-        indent = "  " * self.indent_level
+        indent = "  " * indent_level
         
         if b_type == 2:  # Text
             text_obj = block.text
-            if not text_obj or not text_obj.elements:
-                return ""
+            if not text_obj or not getattr(text_obj, 'elements', None):
+                return [""]
                 
         elif b_type in range(3, 12):  # Headings 1-9
             level = b_type - 2
@@ -75,7 +118,6 @@ class FeishuToMarkdown:
             
         elif b_type == 14:  # Code block
             text_obj = block.code
-            # Try to get language
             lang = ""
             if hasattr(block.code, 'style') and block.code.style:
                 lang_code = getattr(block.code.style, 'language', 0)
@@ -96,51 +138,73 @@ class FeishuToMarkdown:
             
         elif b_type == 27:  # Image
             image_obj = block.image
-            token = image_obj.token if hasattr(image_obj, 'token') else ""
+            token = getattr(image_obj, 'token', "") if image_obj else ""
             if self.image_downloader and token:
                 logger.debug(f"发现云端图片，准备下载: {token}")
                 local_path = self.image_downloader(token)
                 if local_path:
-                    return f"![Image]({local_path})"
+                    return [f"![Image]({local_path})"]
                 else:
-                    return f"![下载失败]({token})"
+                    return [f"![下载失败]({token})"]
             else:
-                return f"![Image]({token})"
+                return [f"![Image]({token})"]
                 
         elif b_type == 22:  # Divider
-            return "\n---\n"
+            return ["", "---", ""]
             
         elif b_type == 31:  # Table
             return self._process_table(block)
             
+        elif b_type == 32:  # TableCell (handled by _process_table)
+            return []
+            
         else:
-            return None
+            return []
 
+        # Extract text content
+        content = ""
         if text_obj and hasattr(text_obj, 'elements') and text_obj.elements:
             for elem in text_obj.elements:
                 if hasattr(elem, 'text_run') and elem.text_run:
                     content += self._process_text_run(elem.text_run)
+        
+        # Build the line
+        line = f"{prefix}{content}{suffix}"
+        lines.append(line)
+        
+        # Process children (for nested lists)
+        if b_type in (12, 13, 17) and hasattr(block, 'children') and block.children:
+            for child_id in block.children:
+                child_block = self.block_map.get(child_id)
+                if child_block:
+                    child_lines = self._process_block(child_block, indent_level + 1)
+                    lines.extend(child_lines)
+        
+        return lines
 
-        return f"{prefix}{content}{suffix}"
-
-    def _process_table(self, table_block) -> str:
-        """Process a table block to Markdown."""
+    def _process_table(self, table_block) -> List[str]:
+        """Process a table block to Markdown with proper cell content extraction."""
         try:
-            table_prop = table_block.table.property
+            table_obj = table_block.table
+            if not table_obj or not hasattr(table_obj, 'property'):
+                return ["[表格]"]
+            
+            table_prop = table_obj.property
             rows = table_prop.row_size
             cols = table_prop.column_size
             
-            # Get cell contents if available
+            # Get cell IDs from table.cells or table_block.children
+            cell_ids = []
+            if hasattr(table_obj, 'cells') and table_obj.cells:
+                cell_ids = table_obj.cells
+            elif hasattr(table_block, 'children') and table_block.children:
+                cell_ids = table_block.children
+            
+            # Extract cell contents
             cells = []
-            if hasattr(table_block, 'children') and table_block.children:
-                for child in table_block.children:
-                    if hasattr(child, 'table_cell'):
-                        cell_text = ""
-                        if hasattr(child, 'text') and child.text and child.text.elements:
-                            for elem in child.text.elements:
-                                if elem.text_run:
-                                    cell_text += elem.text_run.content or ""
-                        cells.append(cell_text)
+            for cell_id in cell_ids:
+                cell_content = self._extract_cell_content(cell_id)
+                cells.append(cell_content)
             
             # Build markdown table
             md_lines = []
@@ -150,7 +214,9 @@ class FeishuToMarkdown:
                 row_cells = []
                 for col_idx in range(cols):
                     if cell_idx < len(cells):
-                        row_cells.append(cells[cell_idx])
+                        # Escape pipe characters and newlines in cell content
+                        cell_text = cells[cell_idx].replace("|", "\\|").replace("\n", " ")
+                        row_cells.append(cell_text)
                     else:
                         row_cells.append("")
                     cell_idx += 1
@@ -160,18 +226,55 @@ class FeishuToMarkdown:
                 if row_idx == 0:
                     md_lines.append("| " + " | ".join(["---"] * cols) + " |")
             
-            return "\n".join(md_lines)
+            return md_lines
             
         except Exception as e:
-            logger.debug(f"Table processing error: {e}")
-            return "[表格]"
+            logger.warning(f"Table processing error: {e}")
+            return ["[表格]"]
+    
+    def _extract_cell_content(self, cell_id: str) -> str:
+        """Extract text content from a table cell by traversing its children."""
+        cell_block = self.block_map.get(cell_id)
+        if not cell_block:
+            return ""
+        
+        # TableCell (block_type=32) contains children that are the actual content
+        if hasattr(cell_block, 'children') and cell_block.children:
+            contents = []
+            for child_id in cell_block.children:
+                child_block = self.block_map.get(child_id)
+                if child_block:
+                    text = self._extract_block_text(child_block)
+                    if text:
+                        contents.append(text)
+            return " ".join(contents)
+        
+        # If no children, try to get text directly
+        return self._extract_block_text(cell_block)
+    
+    def _extract_block_text(self, block) -> str:
+        """Extract plain text content from a block."""
+        text_attrs = ['text', 'heading1', 'heading2', 'heading3', 'heading4', 
+                      'heading5', 'heading6', 'heading7', 'heading8', 'heading9',
+                      'bullet', 'ordered', 'code', 'quote', 'todo']
+        
+        for attr in text_attrs:
+            text_obj = getattr(block, attr, None)
+            if text_obj and hasattr(text_obj, 'elements') and text_obj.elements:
+                content = ""
+                for elem in text_obj.elements:
+                    if hasattr(elem, 'text_run') and elem.text_run:
+                        content += self._process_text_run(elem.text_run)
+                return content
+        
+        return ""
 
     def _process_text_run(self, text_run) -> str:
         """Process a text run with styles to Markdown."""
-        text = text_run.content or ""
+        text = getattr(text_run, 'content', "") or ""
         style = getattr(text_run, 'text_element_style', None)
         
-        if not style:
+        if not style or not text:
             return text
             
         # Apply styles in order (inner to outer)
@@ -184,6 +287,7 @@ class FeishuToMarkdown:
         if getattr(style, 'strikethrough', False):
             text = f"~~{text}~~"
         if hasattr(style, 'link') and style.link and hasattr(style.link, 'url') and style.link.url:
+            # For links, wrap the styled text
             text = f"[{text}]({style.link.url})"
             
         return text
@@ -206,4 +310,3 @@ class FeishuToMarkdown:
             61: "vue", 62: "xml", 63: "yaml"
         }
         return lang_map.get(lang_code, "")
-
