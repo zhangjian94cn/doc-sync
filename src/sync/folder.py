@@ -18,11 +18,12 @@ from src.logger import logger
 class FolderSyncManager:
     """Manages folder-level synchronization with concurrent file processing."""
     
-    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, 
+    def __init__(self, local_root: str, cloud_root_token: str, force: bool = False, overwrite: bool = False,
                  vault_root: str = None, debug: bool = False, client: FeishuClient = None):
         self.local_root = local_root
         self.cloud_root_token = cloud_root_token
         self.force = force
+        self.overwrite = overwrite
         self.vault_root = vault_root or local_root
         self.debug = debug
         self.batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -161,6 +162,7 @@ class FolderSyncManager:
                 task["local_path"], 
                 task["doc_token"], 
                 force=self.force or task["is_new"],
+                overwrite=self.overwrite,
                 vault_root=self.vault_root, 
                 client=self.client, 
                 batch_id=self.batch_id

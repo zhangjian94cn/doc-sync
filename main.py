@@ -61,7 +61,7 @@ def find_vault_root(path: str) -> Optional[str]:
             return None
         current = parent
 
-def run_single_task(local_path, cloud_token, force, note="", target_folder=None, vault_root=None, debug=False, client: FeishuClient = None):
+def run_single_task(local_path, cloud_token, force, overwrite=False, note="", target_folder=None, vault_root=None, debug=False, client: FeishuClient = None):
     """
     Determines whether the task is a folder or file sync and runs the appropriate manager.
     """
@@ -85,7 +85,7 @@ def run_single_task(local_path, cloud_token, force, note="", target_folder=None,
 
     if os.path.isdir(local_path):
         logger.info(f"任务类型: 文件夹同步", icon="📂")
-        manager = FolderSyncManager(local_path, cloud_token, force, vault_root=vault_root, debug=debug, client=client)
+        manager = FolderSyncManager(local_path, cloud_token, force, overwrite=overwrite, vault_root=vault_root, debug=debug, client=client)
         manager.run()
     else:
         # Check if cloud_token is a folder or doc
@@ -134,7 +134,7 @@ def run_single_task(local_path, cloud_token, force, note="", target_folder=None,
         logger.info(f"任务类型: 单文件同步", icon="📄")
         if target_folder:
             logger.info(f"目标文件夹: {target_folder}", icon="📂")
-        manager = SyncManager(local_path, doc_token, force, vault_root=vault_root, client=client)
+        manager = SyncManager(local_path, doc_token, force, overwrite=overwrite, vault_root=vault_root, client=client)
         manager.run(debug=debug)
 
 def main():
@@ -160,6 +160,7 @@ def main():
     parser.add_argument("md_path", nargs='?', help="本地 Markdown 文件或文件夹路径")
     parser.add_argument("doc_token", nargs='?', help="飞书云文档或文件夹的 Token")
     parser.add_argument("--force", action="store_true", help="强制上传（即使云端更新，也会覆盖云端）")
+    parser.add_argument("--overwrite", action="store_true", help="强制全量覆盖（不进行增量比对，直接清空云端文档并重新上传）")
     parser.add_argument("--config", default="sync_config.json", help="指定配置文件路径 (默认: sync_config.json)")
     parser.add_argument("--vault-root", help="显式指定 Obsidian 仓库根目录 (用于解析绝对路径的资源引用)")
     parser.add_argument("--clean", action="store_true", help="清理模式：递归删除所有备份文件 (*.bak.*)")
@@ -312,7 +313,7 @@ def main():
             pass
 
         try:
-            run_single_task(args.md_path, args.doc_token, args.force, note="CLI Task", target_folder=target_folder, vault_root=args.vault_root, debug=args.debug_dump, client=client)
+            run_single_task(args.md_path, args.doc_token, args.force, overwrite=args.overwrite, note="CLI Task", target_folder=target_folder, vault_root=args.vault_root, debug=args.debug_dump, client=client)
         except Exception as e:
             logger.error(f"任务失败: {e}")
             traceback.print_exc()
@@ -348,8 +349,9 @@ def main():
         try:
             # Config file tasks default to non-force unless specified in json
             force_sync = args.force or task.get("force", False)
+            overwrite_sync = args.overwrite or task.get("overwrite", False)
             vault_root = task.get("vault_root") or args.vault_root
-            run_single_task(local_path, cloud_token, force_sync, note, target_folder=task.get("target_folder"), vault_root=vault_root, debug=args.debug_dump, client=client)
+            run_single_task(local_path, cloud_token, force_sync, overwrite=overwrite_sync, note=note, target_folder=task.get("target_folder"), vault_root=vault_root, debug=args.debug_dump, client=client)
             success_count += 1
         except Exception as e:
             logger.error(f"任务失败: {e}")

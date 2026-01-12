@@ -186,33 +186,60 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             blocks: List of block dicts to add
             index: Insert position (-1 for end)
         """
-        # Separate table blocks from regular blocks
-        table_blocks = []
-        regular_blocks = []
+        # Separate blocks into groups to maintain order:
+        # We need to process blocks sequentially.
+        # - Regular blocks can be batched together.
+        # - Table blocks must be processed individually (flushing the previous batch first).
+        
+        block_groups = []
+        current_group = {"type": "regular", "blocks": []}
         
         for b in blocks:
             if b.get("block_type") == 31 and b.get("_is_native_table"):
-                table_blocks.append(b)
+                # If we have accumulated regular blocks, finalize that group
+                if current_group["blocks"]:
+                    block_groups.append(current_group)
+                    current_group = {"type": "regular", "blocks": []}
+                
+                # Add table block as its own group
+                block_groups.append({"type": "table", "block": b})
             else:
-                regular_blocks.append(b)
+                current_group["blocks"].append(b)
         
-        # Handle table blocks separately using create_table
-        current_index = index
-        for table_block in table_blocks:
-            self.create_table(document_id, table_block, current_index)
-            if current_index >= 0:
-                current_index += 1
-        
-        # Handle regular blocks with existing logic
-        if not regular_blocks:
-            return
+        # Append remaining regular blocks
+        if current_group["blocks"]:
+            block_groups.append(current_group)
             
+        # Process groups sequentially
+        # We need to track the insertion index if it's not -1 (append mode)
+        current_index = index
+        cumulative_created = 0
+        
+        for group in block_groups:
+            # Calculate effective index for this group
+            # If index is -1, we always use -1 (append to end)
+            # If index >= 0, we must offset by how many blocks we've inserted so far
+            group_index = -1 if index == -1 else (index + cumulative_created)
+            
+            if group["type"] == "regular":
+                created_ids = self._process_regular_blocks_group(document_id, group["blocks"], group_index)
+                cumulative_created += len(created_ids)
+            elif group["type"] == "table":
+                success = self.create_table(document_id, group["block"], group_index)
+                if success:
+                    cumulative_created += 1
+    
+    def _process_regular_blocks_group(self, document_id: str, blocks: List[Dict], index: int) -> List[str]:
+        """Process a group of regular blocks (including nested recursion)."""
+        all_created_ids = []
+        
         def create_level(parent_id, current_blocks, insert_index=-1):
             batch_payload = []
             children_map = {} 
             media_tasks = [] 
             file_uploads = [] 
-
+            
+            # ... (Existing logic for preparing batch payload) ...
             for idx, b in enumerate(current_blocks):
                 b_copy = b.copy()
                 kids = b_copy.pop("children", None)
@@ -234,7 +261,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                 batch_payload.append(b_copy)
             
             if not batch_payload: 
-                return
+                return []
 
             if file_uploads:
                 root_folder = self.get_root_folder_token()
@@ -257,7 +284,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             
             created_ids = self._batch_create(document_id, parent_id, batch_payload, insert_index)
             if not created_ids: 
-                return
+                return []
 
             for task in media_tasks:
                 idx = task["idx"]
@@ -273,8 +300,10 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                 if idx < len(created_ids):
                     parent_block_id = created_ids[idx]
                     create_level(parent_block_id, kids)
+            
+            return created_ids
 
-        create_level(document_id, regular_blocks, index)
+        return create_level(document_id, blocks, index)
 
     def _batch_create(self, document_id: str, parent_id: str, 
                       blocks_dict_list: List[Dict], index: int = -1) -> List[str]:
@@ -367,14 +396,25 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                                             del tr["text_element_style"]
             return b_new
 
+        # Refactored loop with correct index tracking
+        cumulative_created = 0
+        
         for i in range(0, len(blocks_dict_list), BATCH_CHUNK_SIZE):
             chunk = blocks_dict_list[i:i + BATCH_CHUNK_SIZE]
             payload_children = [clean_block(b) for b in chunk]
-            current_index = index if (index != -1 and i == 0) else -1
+            
+            if index == -1:
+                current_index = -1
+            else:
+                current_index = index + cumulative_created
             
             body = {"children": payload_children, "index": current_index}
             retry_delay = API_RETRY_BASE_DELAY
             
+            # Rate limit check for frequency limit (QPS) before request
+            if i > 0:
+                time.sleep(0.4)  # Simple throttling between batches (5 req/s max)
+
             for attempt in range(API_MAX_RETRIES):
                 try:
                     self._rate_limit()
@@ -392,24 +432,36 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                     if resp.status_code == 200:
                         res_json = resp.json()
                         
+                        # Handle frequency limit (QPS)
                         if res_json.get("code") == 99991400:
                             if attempt < API_MAX_RETRIES - 1:
-                                logger.warning(f"Rate limited, retrying in {retry_delay}s...")
-                                time.sleep(retry_delay)
+                                # Exponential backoff with jitter
+                                wait_time = retry_delay * (1 + attempt)
+                                logger.warning(f"Rate limited (99991400), retrying in {wait_time:.1f}s...")
+                                time.sleep(wait_time)
                                 retry_delay *= 2
                                 continue
                             logger.error(f"Rate limited after retries")
                             break
                         
                         if res_json.get("code") == 0:
+                            batch_created_count = 0
                             for child in res_json["data"]["children"]:
                                 created_ids.append(child["block_id"])
+                                batch_created_count += 1
+                            cumulative_created += batch_created_count
                             break
                         else:
                             logger.error(f"Batch create failed: {res_json.get('code')} {res_json.get('msg')}")
+                            # Also print full response for debugging specific errors
+                            # logger.debug(f"Full response: {res_json}")
                             break
                     else:
                         logger.error(f"Batch create failed (HTTP {resp.status_code})")
+                        try:
+                            logger.error(f"Response Body: {resp.text}")
+                        except:
+                            pass
                         break
                         
                 except Exception as e:
@@ -572,7 +624,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         
         return self._create_descendants(
             document_id, document_id, [table_id], descendants,
-            index if index >= 0 else 0
+            index
         )
 
     # =========================================================================
