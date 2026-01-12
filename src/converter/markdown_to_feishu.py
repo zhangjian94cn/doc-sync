@@ -34,14 +34,35 @@ class MarkdownToFeishu:
         return self.wiki_link_pattern.sub(replace, text)
 
     def _preprocess_markdown(self, text: str) -> str:
+        """Preprocess markdown text before parsing.
+        
+        Handles:
+        - Wiki link conversion
+        - List indentation fix
+        - Blank line preservation
+        """
         text = self._convert_wiki_links(text)
         lines = text.split('\n')
         new_lines = []
         in_code_block = False
+        prev_was_blank = False
         
         for i, line in enumerate(lines):
             if line.strip().startswith('```'):
                 in_code_block = not in_code_block
+            
+            # Handle blank lines (preserve consecutive blank lines as empty paragraphs)
+            if not in_code_block and not line.strip():
+                if prev_was_blank:
+                    # Insert a special marker that will become an empty text block
+                    # Using a zero-width space to create an "empty" paragraph
+                    new_lines.append('\u200b')  # Zero-width space
+                else:
+                    new_lines.append(line)
+                prev_was_blank = True
+                continue
+            else:
+                prev_was_blank = False
             
             if not in_code_block:
                 match = self.weak_indent_pattern.match(line)
@@ -391,8 +412,53 @@ class MarkdownToFeishu:
                     if parent_stack: parent_stack.pop()
 
             i += 1
+        
+        # Post-process to handle blank line markers
+        root_blocks = self._post_process_blank_lines(root_blocks)
             
         return root_blocks
+    
+    def _post_process_blank_lines(self, blocks: List[Dict]) -> List[Dict]:
+        """Post-process blocks to split ones containing blank line markers.
+        
+        Replaces \\u200b markers with actual empty text blocks.
+        """
+        result = []
+        BLANK_MARKER = '\u200b'
+        
+        for block in blocks:
+            if block.get('block_type') == 2:  # Text block
+                text_obj = block.get('text', {})
+                elements = text_obj.get('elements', [])
+                
+                # Check if there's a blank marker in the content
+                full_content = ''
+                for el in elements:
+                    if 'text_run' in el:
+                        full_content += el['text_run'].get('content', '')
+                
+                if BLANK_MARKER in full_content:
+                    # Split by blank marker
+                    parts = full_content.split(BLANK_MARKER)
+                    for i, part in enumerate(parts):
+                        part = part.strip('\n')
+                        if i > 0:
+                            # Add an empty text block for the blank line
+                            result.append({
+                                "block_type": 2,
+                                "text": {"elements": [{"text_run": {"content": ""}}]}
+                            })
+                        if part:
+                            result.append({
+                                "block_type": 2,
+                                "text": {"elements": [{"text_run": {"content": part}}]}
+                            })
+                else:
+                    result.append(block)
+            else:
+                result.append(block)
+        
+        return result
 
     def _add_block_to_tree(self, block, root_blocks, parent_stack, last_block_stack):
         if parent_stack:
