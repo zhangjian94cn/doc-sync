@@ -247,12 +247,17 @@ def main():
                         client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
                         logger.success("Token 自动刷新成功")
                     else:
-                        logger.error("自动刷新失败，Token 已过期。")
-                        logger.error("请运行以下命令重新登录:")
-                        logger.error("  python3 scripts/setup_wizard.py")
-                        logger.error("或手动运行:")
-                        logger.error("  python3 -c 'from src.core.auth import FeishuAuthenticator; FeishuAuthenticator().login()'")
-                        sys.exit(1)
+                        logger.warning("Refresh Token 已过期，正在自动打开浏览器重新登录...")
+                        new_token = auth.login()
+                        if new_token:
+                            user_token = new_token
+                            from src import config as src_config
+                            src_config.FEISHU_USER_ACCESS_TOKEN = new_token
+                            client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
+                            logger.success("重新登录成功")
+                        else:
+                            logger.error("登录失败，请检查网络或手动重试。")
+                            sys.exit(1)
                 else:
                     # Other errors (e.g. permission denied for user_info) shouldn't block main flow if token is valid?
                     # But 99991677 is specific to expiry.
