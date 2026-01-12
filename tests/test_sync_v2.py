@@ -49,9 +49,9 @@ class TestSyncV2(unittest.TestCase):
         finally:
             os.remove(path)
 
-    @patch('src.sync.os.listdir')
-    @patch('src.sync.os.path.isdir')
-    @patch('src.sync.os.path.exists')
+    @patch('src.sync.folder.os.listdir')
+    @patch('src.sync.folder.os.path.isdir')
+    @patch('src.sync.folder.os.path.exists')
     def test_sync_deletion(self, mock_exists, mock_isdir, mock_listdir):
         # Setup
         client = MagicMock()
@@ -77,6 +77,7 @@ class TestSyncV2(unittest.TestCase):
         mock_isdir.return_value = False
         
         manager = FolderSyncManager("/local", "cloud_root", client=client)
+        manager._stats_lock = MagicMock()
         
         # Run
         tasks = manager._collect_sync_tasks("/local", "cloud_root")
@@ -103,9 +104,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_matching_types(self):
         """Test that matching block types generate update requests."""
-        from src.sync import SyncManager
+        from src.sync.manager import SyncManager
         
-        with patch('src.sync.config'):
+        with patch('src.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -129,9 +130,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_different_types(self):
         """Test that different block types return None (no update)."""
-        from src.sync import SyncManager
+        from src.sync.manager import SyncManager
         
-        with patch('src.sync.config'):
+        with patch('src.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -153,9 +154,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_heading_types(self):
         """Test update for heading block types."""
-        from src.sync import SyncManager
+        from src.sync.manager import SyncManager
         
-        with patch('src.sync.config'):
+        with patch('src.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -182,9 +183,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_list_types(self):
         """Test update for bullet and ordered list types."""
-        from src.sync import SyncManager
+        from src.sync.manager import SyncManager
         
-        with patch('src.sync.config'):
+        with patch('src.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"

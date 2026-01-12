@@ -352,7 +352,7 @@ class TestGetBlockChildren:
     
     def test_get_children_success(self, mock_client):
         """Test successful retrieval of child blocks."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('src.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -374,7 +374,7 @@ class TestGetBlockChildren:
     
     def test_get_children_with_descendants(self, mock_client):
         """Test retrieval with descendants flag."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('src.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -401,7 +401,7 @@ class TestGetBlockChildren:
     
     def test_get_children_pagination(self, mock_client):
         """Test pagination handling."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('src.feishu.blocks.requests_module') as mock_requests:
             # First page with page_token
             page1_response = Mock()
             page1_response.status_code = 200
@@ -433,7 +433,7 @@ class TestGetBlockChildren:
     
     def test_get_children_failure(self, mock_client):
         """Test handling of API failure."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('src.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -448,10 +448,14 @@ class TestGetBlockChildren:
     
     def test_get_children_rate_limit_retry(self, mock_client):
         """Test rate limit retry logic."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
-            # First call returns rate limit, second succeeds
-            mock_response_429 = Mock()
-            mock_response_429.status_code = 429
+        with patch('src.feishu.blocks.requests_module') as mock_requests:
+            # First call returns rate limit error in body, second succeeds
+            mock_response_limited = Mock()
+            mock_response_limited.status_code = 200
+            mock_response_limited.json.return_value = {
+                "code": 99991400,
+                "msg": "rate limit exceeded"
+            }
             
             mock_response_ok = Mock()
             mock_response_ok.status_code = 200
@@ -460,7 +464,7 @@ class TestGetBlockChildren:
                 "data": {"items": [{"block_id": "block1"}]}
             }
             
-            mock_requests.get.side_effect = [mock_response_429, mock_response_ok]
+            mock_requests.get.side_effect = [mock_response_limited, mock_response_ok]
             
             result = mock_client.get_block_children("doc123", "doc123")
             
@@ -487,30 +491,25 @@ class TestDeleteBlockChildren:
         """Test successful deletion of child blocks."""
         mock_response = Mock()
         mock_response.success.return_value = True
-        mock_response.data.document_revision_id = 5
-        mock_response.data.client_token = "token123"
         mock_client.client.docx.v1.document_block_children.batch_delete.return_value = mock_response
         
         result = mock_client.delete_block_children("doc123", "block456", 0, 2)
         
-        assert result is not None
-        assert result["document_revision_id"] == 5
-        assert result["client_token"] == "token123"
+        # Now returns bool, not dict
+        assert result is True
     
     def test_delete_children_with_client_token(self, mock_client):
         """Test deletion with idempotency token."""
         mock_response = Mock()
         mock_response.success.return_value = True
-        mock_response.data.document_revision_id = 6
-        mock_response.data.client_token = "my-token"
         mock_client.client.docx.v1.document_block_children.batch_delete.return_value = mock_response
         
         result = mock_client.delete_block_children(
             "doc123", "block456", 1, 3, client_token="my-token"
         )
         
-        assert result is not None
-        assert result["client_token"] == "my-token"
+        # Now returns bool, not dict
+        assert result is True
     
     def test_delete_children_failure(self, mock_client):
         """Test handling of API failure."""
@@ -522,7 +521,8 @@ class TestDeleteBlockChildren:
         
         result = mock_client.delete_block_children("doc123", "block456", 0, 1)
         
-        assert result is None
+        # Now returns False instead of None
+        assert result is False
     
     def test_delete_children_rate_limit_retry(self, mock_client):
         """Test rate limit retry logic."""
@@ -534,8 +534,6 @@ class TestDeleteBlockChildren:
         
         mock_response_ok = Mock()
         mock_response_ok.success.return_value = True
-        mock_response_ok.data.document_revision_id = 7
-        mock_response_ok.data.client_token = "success-token"
         
         mock_client.client.docx.v1.document_block_children.batch_delete.side_effect = [
             mock_response_limited, mock_response_ok
@@ -543,8 +541,8 @@ class TestDeleteBlockChildren:
         
         result = mock_client.delete_block_children("doc123", "block456", 0, 1)
         
-        assert result is not None
-        assert result["document_revision_id"] == 7
+        # Now returns bool
+        assert result is True
 
 
 class TestConvertContentToBlocks:
