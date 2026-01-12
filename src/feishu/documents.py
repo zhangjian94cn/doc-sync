@@ -92,12 +92,27 @@ class DocumentOperationsMixin:
         if not blocks: 
             return
         
+        # Find root block and count its children
+        root_block = None
+        for block in blocks:
+            if block.block_type == 1:  # Page block
+                root_block = block
+                break
+        
+        if not root_block or not hasattr(root_block, 'children') or not root_block.children:
+            logger.debug(f"Document {document_id} is already empty")
+            return
+        
+        children_count = len(root_block.children)
+        if children_count == 0:
+            return
+        
         max_retries = API_MAX_RETRIES
         retry_delay = API_RETRY_BASE_DELAY
         
         for attempt in range(max_retries):
             request = BatchDeleteDocumentBlockChildrenRequest.builder().document_id(document_id).block_id(document_id).request_body(
-                BatchDeleteDocumentBlockChildrenRequestBody.builder().start_index(0).end_index(len(blocks)).build()
+                BatchDeleteDocumentBlockChildrenRequestBody.builder().start_index(0).end_index(children_count).build()
             ).build()
             resp = self.client.docx.v1.document_block_children.batch_delete(request, self._get_request_option())
             
