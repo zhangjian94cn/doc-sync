@@ -66,8 +66,8 @@ class FeishuClientBase:
             try:
                 with open(self.asset_cache_path, 'r') as f:
                     return json.load(f)
-            except:
-                pass
+            except (json.JSONDecodeError, IOError, OSError) as e:
+                logger.debug(f"Asset cache load error: {e}")
         return {}
 
     def _save_asset_cache(self):

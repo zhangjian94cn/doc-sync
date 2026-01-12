@@ -125,11 +125,15 @@ class SyncManager:
         field = mapping.get(b_type)
         if field and field in block_dict:
             obj = block_dict[field]
-            if "elements" in obj:
-                for el in obj["elements"]:
-                    if "text_run" in el: content += el["text_run"].get("content", "")
-            elif "image" in obj: content = obj["image"].get("token", "")
-            elif "file" in obj: content = obj["file"].get("token", "")
+            if isinstance(obj, dict):
+                if "elements" in obj:
+                    for el in obj["elements"]:
+                        if isinstance(el, dict) and "text_run" in el:
+                            content += el["text_run"].get("content", "")
+                elif "image" in obj: 
+                    content = obj["image"].get("token", "")
+                elif "file" in obj: 
+                    content = obj["file"].get("token", "")
 
         raw_children = block_dict.get("children_data")
         if not raw_children:
