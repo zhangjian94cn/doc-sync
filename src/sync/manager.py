@@ -287,11 +287,21 @@ class SyncManager:
         try:
             blocks = self.client.list_document_blocks(self.doc_token)
             blocks = [b for b in blocks if b.block_type != 1]
-            converter = FeishuToMarkdown(
-                image_downloader=lambda t: self.client.download_image(
-                    t, os.path.join(os.path.dirname(self.md_path), "assets", f"{t}.png")
-                )
-            )
+            
+            # Use vault_root/assets for unified asset storage
+            assets_dir = os.path.join(self.vault_root, "assets")
+            os.makedirs(assets_dir, exist_ok=True)
+            
+            def download_image(token: str) -> Optional[str]:
+                """Download image and return Obsidian-compatible path."""
+                local_path = os.path.join(assets_dir, f"{token}.png")
+                result = self.client.download_image(token, local_path)
+                if result:
+                    # Return path relative to vault_root for Obsidian
+                    return f"assets/{token}.png"
+                return None
+            
+            converter = FeishuToMarkdown(image_downloader=download_image)
             md_content = converter.convert(blocks)
             if os.path.exists(self.md_path):
                 bak_path = f"{self.md_path}.bak.{self.batch_id}"
