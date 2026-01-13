@@ -78,13 +78,15 @@ class SyncManager:
 
     def run(self, debug=False):
         logger.header(f"任务: {os.path.basename(self.md_path)}", icon="📄")
-        if not os.path.exists(self.md_path):
-            logger.error(f"错误: 未找到文件: {self.md_path}")
-            sys.exit(1)
-            
-        local_mtime = os.path.getmtime(self.md_path)
-        logger.info(f"本地修改时间: {datetime.fromtimestamp(local_mtime)}", icon="🕒")
         
+        # Check if local file exists
+        if os.path.exists(self.md_path):
+            local_mtime = os.path.getmtime(self.md_path)
+            logger.info(f"本地修改时间: {datetime.fromtimestamp(local_mtime)}", icon="🕒")
+        else:
+            logger.warning(f"本地文件不存在: {self.md_path} (将尝试从云端下载)", icon="⚠️")
+            local_mtime = 0
+            
         logger.info(f"检查云端状态 ({self.doc_token})...", icon="🔍")
         try:
             file_info = self.client.get_file_info(self.doc_token, obj_type="docx")
