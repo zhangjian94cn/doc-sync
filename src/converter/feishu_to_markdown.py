@@ -297,7 +297,8 @@ class FeishuToMarkdown:
                 for col_idx in range(cols):
                     if cell_idx < len(cells):
                         # Escape pipe characters and newlines in cell content
-                        cell_text = cells[cell_idx].replace("|", "\\|").replace("\n", " ")
+                        # Replace \n with <br> for internal newlines, but usually they are already handled
+                        cell_text = cells[cell_idx].replace("|", "\\|").replace("\n", "<br>")
                         row_cells.append(cell_text)
                     else:
                         row_cells.append("")
@@ -329,7 +330,8 @@ class FeishuToMarkdown:
                     text = self._extract_block_text(child_block)
                     if text:
                         contents.append(text)
-            return " ".join(contents)
+            # Use <br> for line breaks within a cell to keep it valid Markdown table
+            return "<br>".join(contents)
         
         # If no children, try to get text directly
         return self._extract_block_text(cell_block)

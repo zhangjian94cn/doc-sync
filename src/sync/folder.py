@@ -38,7 +38,7 @@ class FolderSyncManager:
                 user_access_token=config.FEISHU_USER_ACCESS_TOKEN
             )
         self.stats = {"created": 0, "updated": 0, "skipped": 0, "failed": 0, "deleted_cloud": 0, "deleted_local": 0}
-        self._stats_lock = None
+        self._stats_lock = threading.Lock()  # Initialize early to ensure thread safety
         self.state = SyncState(self.vault_root)
 
     def run(self):

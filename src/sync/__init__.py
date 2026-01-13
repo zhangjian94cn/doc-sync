@@ -12,8 +12,8 @@ Usage:
     from src.sync import SyncManager, FolderSyncManager
 """
 
-from src.sync.manager import SyncManager, SyncResult
+from src.sync.manager import SyncManager, SyncResult, SyncError
 from src.sync.folder import FolderSyncManager
 from src.sync.resource import ResourceIndex
 
-__all__ = ['SyncManager', 'FolderSyncManager', 'SyncResult', 'ResourceIndex']
+__all__ = ['SyncManager', 'FolderSyncManager', 'SyncResult', 'SyncError', 'ResourceIndex']
