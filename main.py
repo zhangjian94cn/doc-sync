@@ -189,8 +189,8 @@ def main():
                 tasks = load_config(args.config)
                 if tasks and tasks[0].get("local"):
                     target_path = tasks[0]["local"]
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"加载配置失败: {e}")
                 
         logger.info(f"正在扫描并清理备份文件: {os.path.abspath(target_path)}")
         count = 0

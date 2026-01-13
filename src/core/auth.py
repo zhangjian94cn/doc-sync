@@ -126,10 +126,26 @@ class FeishuAuthenticator:
         auth_result["token"] = None
         auth_result["refresh_token"] = None
         
-        with socketserver.TCPServer(("", AUTH_SERVER_PORT), AuthHandler) as httpd:
-            httpd.authenticator = self
-            print(f"📡 Waiting for callback...")
-            httpd.serve_forever()
+        try:
+            # Allow address reuse to prevent "Address already in use" error
+            socketserver.TCPServer.allow_reuse_address = True
+            with socketserver.TCPServer(("", AUTH_SERVER_PORT), AuthHandler) as httpd:
+                httpd.authenticator = self
+                print(f"📡 Waiting for callback on port {AUTH_SERVER_PORT}...")
+                httpd.serve_forever()
+        except OSError as e:
+            if e.errno == 48:  # Address already in use (macOS)
+                print(f"❌ Port {AUTH_SERVER_PORT} is already in use.")
+                print(f"   Please close the application using this port or change AUTH_SERVER_PORT in config.")
+            elif e.errno == 98:  # Address already in use (Linux)
+                print(f"❌ Port {AUTH_SERVER_PORT} is already in use.")
+                print(f"   Please close the application using this port or change AUTH_SERVER_PORT in config.")
+            else:
+                print(f"❌ Failed to start auth server: {e}")
+            return None
+        except Exception as e:
+            print(f"❌ Auth server error: {e}")
+            return None
             
         if auth_result["token"]:
             print("✅ Login Successful!")

@@ -5,10 +5,10 @@ Provides single-file synchronization between local Markdown and Feishu documents
 """
 
 import os
-import sys
 import hashlib
 import json
 import shutil
+import threading
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import IntEnum
@@ -26,6 +26,11 @@ from src.logger import logger
 from src.sync.resource import ResourceIndex
 
 
+class SyncError(Exception):
+    """Custom exception for sync operation errors."""
+    pass
+
+
 class SyncResult(IntEnum):
     """Sync operation result codes."""
     SUCCESS = 0
@@ -36,9 +41,10 @@ class SyncResult(IntEnum):
 class SyncManager:
     """Manages synchronization between local Markdown files and Feishu documents."""
     
-    # Class-level resource index cache
+    # Class-level resource index cache with thread protection
     _resource_index: Optional[ResourceIndex] = None
     _resource_index_root: Optional[str] = None
+    _resource_index_lock = threading.Lock()
     
     def __init__(self, md_path: str, doc_token: str, force: bool = False, overwrite: bool = False,
                  vault_root: str = None, client: FeishuClient = None, batch_id: str = None):
@@ -62,19 +68,20 @@ class SyncManager:
     
     def _init_resource_index(self) -> None:
         """Initialize or reuse the resource index for the vault."""
-        if (SyncManager._resource_index is None or 
-            SyncManager._resource_index_root != self.vault_root):
-            logger.debug(f"构建资源索引: {self.vault_root}")
-            SyncManager._resource_index = ResourceIndex(
-                self.vault_root,
-                extensions={'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp',
-                           'mp4', 'mov', 'avi', 'mkv', 'webm',
-                           'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-                           'zip', 'rar', '7z', 'tar',
-                           'excalidraw', 'drawio', 'canvas',
-                           'md'}
-            )
-            SyncManager._resource_index_root = self.vault_root
+        with SyncManager._resource_index_lock:
+            if (SyncManager._resource_index is None or 
+                SyncManager._resource_index_root != self.vault_root):
+                logger.debug(f"构建资源索引: {self.vault_root}")
+                SyncManager._resource_index = ResourceIndex(
+                    self.vault_root,
+                    extensions={'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp',
+                               'mp4', 'mov', 'avi', 'mkv', 'webm',
+                               'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+                               'zip', 'rar', '7z', 'tar',
+                               'excalidraw', 'drawio', 'canvas',
+                               'md'}
+                )
+                SyncManager._resource_index_root = self.vault_root
 
     def run(self, debug=False):
         logger.header(f"任务: {os.path.basename(self.md_path)}", icon="📄")
@@ -100,8 +107,7 @@ class SyncManager:
             should_upload = True
         else:
             if file_info.doc_type == "folder":
-                logger.error(f"错误: 提供的 Token ({self.doc_token}) 是一个文件夹，SyncManager 只能处理文档。")
-                sys.exit(1)
+                raise SyncError(f"Token ({self.doc_token}) 是一个文件夹，SyncManager 只能处理文档。")
                 
             cloud_mtime = parse_cloud_time(file_info.latest_modify_time)
             logger.info(f"云端修改时间: {datetime.fromtimestamp(cloud_mtime)}", icon="☁️ ")
@@ -110,7 +116,7 @@ class SyncManager:
                 result = self._sync_cloud_to_local()
                 if result == SyncResult.SUCCESS: should_upload = False
                 elif result == SyncResult.EMPTY_CLOUD: should_upload = True
-                else: sys.exit(1)
+                else: raise SyncError(f"云端同步失败 (doc_token: {self.doc_token})")
 
         if should_upload: self._sync_local_to_cloud()
         if debug: self.verify_cloud_structure()
