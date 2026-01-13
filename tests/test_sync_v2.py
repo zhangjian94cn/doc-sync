@@ -59,7 +59,8 @@ class TestSyncV2(unittest.TestCase):
     @patch('src.sync.folder.os.listdir')
     @patch('src.sync.folder.os.path.isdir')
     @patch('src.sync.folder.os.path.exists')
-    def test_sync_deletion(self, mock_exists, mock_isdir, mock_listdir):
+    @patch('src.sync.folder.SyncState')
+    def test_sync_deletion(self, MockSyncState, mock_exists, mock_isdir, mock_listdir):
         # Setup
         client = MagicMock()
         # Mock cloud files: [kept, deleted]
@@ -83,6 +84,16 @@ class TestSyncV2(unittest.TestCase):
         # In this mock we only have kept.md
         mock_isdir.return_value = False
         
+        # Mock SyncState behavior
+        mock_state = MockSyncState.return_value
+        def get_by_token_side_effect(token):
+            if token == "token_kept":
+                return {"path": "/local/kept.md", "token": token}
+            if token == "token_deleted":
+                return {"path": "/local/deleted.md", "token": token}
+            return None
+        mock_state.get_by_token.side_effect = get_by_token_side_effect
+        
         manager = FolderSyncManager("/local", "cloud_root", client=client)
         manager._stats_lock = MagicMock()
         
@@ -91,11 +102,19 @@ class TestSyncV2(unittest.TestCase):
         
         # Verify
         # 1. kept.md should produce a task
-        self.assertEqual(len(tasks), 1)
-        self.assertEqual(tasks[0]["local_path"], "/local/kept.md")
-        self.assertEqual(tasks[0]["doc_token"], "token_kept")
+        # Note: In new logic, it produces a task with type="sync"
+        task_kept = next((t for t in tasks if t.get("doc_token") == "token_kept"), None)
+        self.assertIsNotNone(task_kept)
+        self.assertEqual(task_kept["local_path"], "/local/kept.md")
         
         # 2. deleted should be deleted from cloud
+        # Note: In new logic, it produces a task with type="delete_cloud"
+        task_deleted = next((t for t in tasks if t.get("doc_token") == "token_deleted"), None)
+        self.assertIsNotNone(task_deleted)
+        self.assertEqual(task_deleted["type"], "delete_cloud")
+        
+        # Execute to verify client call
+        manager._execute_sync_task(task_deleted, MagicMock())
         client.delete_file.assert_called_once_with("token_deleted", file_type="docx")
 
 
