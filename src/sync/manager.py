@@ -144,10 +144,15 @@ class SyncManager:
                 elif "file" in obj: 
                     content = obj["file"].get("token", "")
 
-        raw_children = block_dict.get("children_data")
+        # For cloud blocks: children_data contains actual child block dicts
+        # For local blocks: children contains actual child block dicts
+        # Cloud blocks may also have children as a list of ID strings - ignore those
+        raw_children = block_dict.get("children_data") or []
         if not raw_children:
+            # Fallback to children, but only if they are dicts (local blocks)
             raw_children = block_dict.get("children") or []
         
+        # Filter to only include dict children (excludes ID strings from cloud blocks)
         children = [c for c in raw_children if isinstance(c, dict)]
         child_hashes = [self._calculate_tree_hash(c) for c in children]
         
@@ -170,6 +175,7 @@ class SyncManager:
             # When overwriting, we append to the end (-1) to maintain order correctly
             self.client.add_blocks(self.doc_token, local_blocks, index=-1)
             logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
+            os.utime(self.md_path, None)
             return
 
         logger.info("获取云端现有内容以进行比对...", icon="🔍")
@@ -200,7 +206,10 @@ class SyncManager:
         ops_count = sum(1 for tag, i1, i2, j1, j2 in opcodes if tag != 'equal')
 
         if ops_count == 0:
-            logger.success("内容已同步，无需更新。"); return
+            logger.success("内容已同步，无需更新。")
+            # Update local mtime to match cloud to prevent false positive on next run
+            os.utime(self.md_path, None)
+            return
 
         if ops_count > SYNC_DIFF_THRESHOLD or not root_children:
             logger.warning("变更较多或为空文档，使用全量覆盖模式...")
@@ -245,9 +254,17 @@ class SyncManager:
                     self.client.add_blocks(self.doc_token, local_blocks)
         
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
+        # Update local mtime to ensure next run sees it as current
+        os.utime(self.md_path, None)
 
     def _try_update_block_content(self, cloud_block: Dict, local_block: Dict) -> Optional[Dict]:
-        """Try to create an update request if block types match."""
+        """Try to create an update request if block types match.
+        
+        Returns None if:
+        - Block types don't match
+        - Children structure differs (batch_update can't add/remove children)
+        - Block type is not a text-based type
+        """
         cloud_type = cloud_block.get("block_type")
         local_type = local_block.get("block_type")
         
@@ -256,6 +273,13 @@ class SyncManager:
         
         block_id = cloud_block.get("block_id")
         if not block_id:
+            return None
+        
+        # Check if children structure matches - batch_update can't handle structural changes
+        cloud_children = cloud_block.get("children_data") or []
+        local_children = local_block.get("children") or []
+        if len(cloud_children) != len(local_children):
+            logger.debug(f"块 {block_id[:15]}... 子结构不同 (cloud: {len(cloud_children)}, local: {len(local_children)}), 需要重建")
             return None
         
         TEXT_BLOCK_TYPES = {
