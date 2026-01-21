@@ -126,12 +126,42 @@ class TestFeishuToMarkdown:
         """Test converting ordered list blocks."""
         converter = FeishuToMarkdown()
         
-        page = MockBlock("doc_token", 1, children=["block1"])
-        ordered = MockBlock("block1", 13, parent_id="doc_token",
+        page = MockBlock("doc_token", 1, children=["block1", "block2"])
+        ordered1 = MockBlock("block1", 13, parent_id="doc_token",
                            ordered=MockTextObj("First item"))
+        ordered2 = MockBlock("block2", 13, parent_id="doc_token",
+                           ordered=MockTextObj("Second item"))
         
-        result = converter.convert([page, ordered])
+        result = converter.convert([page, ordered1, ordered2])
         assert "1. First item" in result
+        assert "2. Second item" in result
+
+    def test_convert_nested_ordered_list(self):
+        """Test converting nested ordered list blocks with correct numbering."""
+        converter = FeishuToMarkdown()
+        
+        # Structure:
+        # 1. Item 1
+        #    1. Item 1.1
+        #    2. Item 1.2
+        # 2. Item 2
+        
+        page = MockBlock("root", 1, children=["n1", "n4"])
+        n1 = MockBlock("n1", 13, parent_id="root", children=["n2", "n3"],
+                      ordered=MockTextObj("Item 1"))
+        n2 = MockBlock("n2", 13, parent_id="n1",
+                      ordered=MockTextObj("Item 1.1"))
+        n3 = MockBlock("n3", 13, parent_id="n1",
+                      ordered=MockTextObj("Item 1.2"))
+        n4 = MockBlock("n4", 13, parent_id="root",
+                      ordered=MockTextObj("Item 2"))
+        
+        result = converter.convert([page, n1, n2, n3, n4])
+        
+        assert "1. Item 1" in result
+        assert "  1. Item 1.1" in result
+        assert "  2. Item 1.2" in result
+        assert "2. Item 2" in result
     
     def test_convert_bold_text(self):
         """Test converting text with bold style."""

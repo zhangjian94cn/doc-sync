@@ -105,6 +105,9 @@ class FeishuToMarkdown:
                     if b.block_type != 1 and b.block_type != 32
                 ]
 
+        # Track ordered list numbering for root blocks
+        ordered_list_index = 1
+        
         for block_id in root_children_ids:
             block = self.block_map.get(block_id)
             if not block:
@@ -122,6 +125,10 @@ class FeishuToMarkdown:
             
             is_first_block = False
             curr_type = block.block_type
+            
+            # Reset counter if not an ordered list
+            if curr_type != 13:
+                ordered_list_index = 1
             
             # Add blank lines between different block types for better readability
             if prev_type is not None:
@@ -141,7 +148,13 @@ class FeishuToMarkdown:
                 elif curr_type not in (12, 13, 17) and prev_type in (12, 13, 17):
                     md_lines.append("")
             
-            lines = self._process_block(block, indent_level=0)
+            # Pass current list index if it's an ordered list
+            current_idx = None
+            if curr_type == 13:
+                current_idx = ordered_list_index
+                ordered_list_index += 1
+            
+            lines = self._process_block(block, indent_level=0, list_index=current_idx)
             if lines:
                 md_lines.extend(lines)
                 prev_type = curr_type
@@ -203,7 +216,7 @@ class FeishuToMarkdown:
         
         return None
 
-    def _process_block(self, block, indent_level: int = 0) -> List[str]:
+    def _process_block(self, block, indent_level: int = 0, list_index: Optional[int] = None) -> List[str]:
         """Process a single block and return list of Markdown lines."""
         b_type = block.block_type
         lines = []
@@ -227,7 +240,8 @@ class FeishuToMarkdown:
             text_obj = block.bullet
             
         elif b_type == 13:  # Ordered list
-            prefix = f"{indent}1. "
+            idx = list_index if list_index is not None else 1
+            prefix = f"{indent}{idx}. "
             text_obj = block.ordered
             
         elif b_type == 14:  # Code block
@@ -287,11 +301,21 @@ class FeishuToMarkdown:
         lines.append(line)
         
         # Process children (for nested lists)
-        if b_type in (12, 13, 17) and hasattr(block, 'children') and block.children:
+        if hasattr(block, 'children') and block.children:
+            child_list_index = 1
             for child_id in block.children:
                 child_block = self.block_map.get(child_id)
                 if child_block:
-                    child_lines = self._process_block(child_block, indent_level + 1)
+                    # Pass list index only for ordered lists (13)
+                    # Reset counter if we encounter a non-ordered list block (though uncommon in strict lists)
+                    current_idx = None
+                    if child_block.block_type == 13:
+                        current_idx = child_list_index
+                        child_list_index += 1
+                    else:
+                        child_list_index = 1
+                    
+                    child_lines = self._process_block(child_block, indent_level + 1, list_index=current_idx)
                     lines.extend(child_lines)
         
         return lines
