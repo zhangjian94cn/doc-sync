@@ -120,7 +120,9 @@ class TestFeishuToMarkdown:
         
         result = converter.convert([page, parent, child])
         assert "- Parent" in result
-        assert "  - Child" in result
+        result = converter.convert([page, parent, child])
+        assert "- Parent" in result
+        assert "    - Child" in result
     
     def test_convert_ordered_list(self):
         """Test converting ordered list blocks."""
@@ -159,8 +161,8 @@ class TestFeishuToMarkdown:
         result = converter.convert([page, n1, n2, n3, n4])
         
         assert "1. Item 1" in result
-        assert "  1. Item 1.1" in result
-        assert "  2. Item 1.2" in result
+        assert "    1. Item 1.1" in result
+        assert "    2. Item 1.2" in result
         assert "2. Item 2" in result
     
     def test_convert_bold_text(self):

@@ -223,7 +223,7 @@ class FeishuToMarkdown:
         text_obj = None
         prefix = ""
         suffix = ""
-        indent = "  " * indent_level
+        indent = "    " * indent_level  # Use 4 spaces for indentation as requested
         
         if b_type == 2:  # Text
             text_obj = block.text
