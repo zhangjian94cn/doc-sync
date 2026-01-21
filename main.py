@@ -198,10 +198,22 @@ def main():
         
         for root, dirs, files in os.walk(target_path):
             for file in files:
-                # Match pattern: *.bak.<digits>
-                if ".bak." in file:
-                    parts = file.rsplit(".bak.", 1)
-                    if len(parts) == 2 and parts[1].isdigit():
+                # Match pattern: *.bak.<digits> or just *.bak
+                # Standardize to handle .bak and .bak.TIMESTAMP
+                if ".bak" in file:
+                    # Additional check to be safe
+                    is_bak = False
+                    if file.endswith(".bak"):
+                        is_bak = True
+                    elif ".bak." in file:
+                        parts = file.rsplit(".bak.", 1)
+                        if len(parts) == 2 and parts[1].isdigit():
+                            is_bak = True
+                        elif len(parts) == 2 and "_" in parts[1]: # Handle TIMESTAMP with underscore like 20260113_094716
+                             # simple check if it looks like timestamp
+                             is_bak = True
+                    
+                    if is_bak:
                         file_path = os.path.join(root, file)
                         try:
                             s = os.path.getsize(file_path)
