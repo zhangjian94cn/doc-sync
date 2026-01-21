@@ -17,6 +17,7 @@ const appStatus = document.getElementById('app-status');
 const lastSyncTime = document.getElementById('last-sync-time');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const forceSyncCheckbox = document.getElementById('force-sync-checkbox');
+const overwriteSyncCheckbox = document.getElementById('overwrite-sync-checkbox');
 const pageTitle = document.getElementById('page-title');
 
 // Modal Elements
@@ -101,7 +102,8 @@ const i18n = {
         checkFailed: '❌ Some checks failed',
         toastSaved: 'Configurations saved',
         toastDeleted: 'Task deleted',
-        toastError: 'Operation failed'
+        toastError: 'Operation failed',
+        overwriteSync: 'Full Overwrite (clear & reupload)'
     },
     zh: {
         brand: 'DocSync',
@@ -173,7 +175,8 @@ const i18n = {
         checkFailed: '❌ 部分检查失败',
         toastSaved: '配置已保存',
         toastDeleted: '任务已删除',
-        toastError: '操作失败'
+        toastError: '操作失败',
+        overwriteSync: '全量覆盖（清空后重写）'
     }
 };
 
@@ -395,7 +398,8 @@ startSyncBtn.addEventListener('click', () => {
     log(t('initializing'));
 
     const options = {
-        force: forceSyncCheckbox?.checked || false
+        force: forceSyncCheckbox?.checked || false,
+        overwrite: overwriteSyncCheckbox?.checked || false
     };
 
     ipcRenderer.send('run-sync', options);

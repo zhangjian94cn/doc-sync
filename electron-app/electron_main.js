@@ -157,6 +157,11 @@ ipcMain.on('run-sync', (event, options = {}) => {
     args.push('--force');
   }
 
+  // Add overwrite flag if requested
+  if (options.overwrite) {
+    args.push('--overwrite');
+  }
+
   const cwd = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
 
   const spawnOptions = {
@@ -174,6 +179,11 @@ ipcMain.on('run-sync', (event, options = {}) => {
 
   child.stderr.on('data', (data) => {
     event.reply('sync-log', `[ERROR] ${data.toString()}`);
+  });
+
+  child.on('error', (err) => {
+    event.reply('sync-log', `[SPAWN ERROR] ${err.message}`);
+    event.reply('sync-finished', false);
   });
 
   child.on('close', (code) => {
@@ -196,6 +206,10 @@ ipcMain.handle('health-check', async () => {
     child.stdout.on('data', (data) => output += data.toString());
     child.stderr.on('data', (data) => output += data.toString());
 
+    child.on('error', (err) => {
+      resolve({ success: false, output: `Spawn error: ${err.message}` });
+    });
+
     child.on('close', (code) => {
       resolve({ success: code === 0, output });
     });
@@ -215,13 +229,27 @@ ipcMain.on('run-clean', (event) => {
 
   const cleanArgs = [...args, '--clean'];
 
+  console.log(`Running clean: ${command} ${cleanArgs.join(' ')} in ${cwd}`);
+
   const child = spawn(command, cleanArgs, { cwd, env: process.env });
 
   let output = '';
-  child.stdout.on('data', (data) => output += data.toString());
-  child.stderr.on('data', (data) => output += data.toString());
+  child.stdout.on('data', (data) => {
+    output += data.toString();
+    console.log('stdout:', data.toString());
+  });
+  child.stderr.on('data', (data) => {
+    output += data.toString();
+    console.log('stderr:', data.toString());
+  });
+
+  child.on('error', (err) => {
+    console.error('Spawn error:', err);
+    event.reply('clean-finished', false);
+  });
 
   child.on('close', (code) => {
+    console.log(`Clean finished with code: ${code}`);
     event.reply('clean-finished', code === 0);
   });
 });
