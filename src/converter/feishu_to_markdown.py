@@ -67,12 +67,44 @@ class FeishuToMarkdown:
         
         # Process only root-level blocks (direct children of document)
         root_children_ids = []
+        
+        # Method 1: Use Page Block children if available
         if doc_root and hasattr(doc_root, 'children') and doc_root.children:
             root_children_ids = doc_root.children
         else:
-            # Fallback: process all non-Page blocks
-            root_children_ids = [b.block_id for b in blocks if b.block_type != 1]
-        
+            # Fallback Method 2: Identify Document ID and find its direct children
+            # Usually the Page Block ID is the Document ID
+            doc_id = doc_root.block_id if doc_root else None
+            
+            # If doc_id is not found from Page Block, try to infer it from parent_id frequency
+            # or assume the first block's parent is the document (if it looks like a doc ID)
+            if not doc_id and blocks:
+                # Most blocks should share the same parent_id if it's a flat list of roots
+                # But here we have a mix.
+                # Let's find blocks whose parent_id is NOT in the block_map
+                all_ids = set(self.block_map.keys())
+                root_candidates = []
+                for b in blocks:
+                    pid = getattr(b, 'parent_id', None)
+                    if not pid or pid not in all_ids:
+                        root_candidates.append(b.block_id)
+                    # Also, if pid == doc_id (if we knew it)
+                
+                root_children_ids = root_candidates
+            elif doc_id:
+                # Filter blocks whose parent_id == doc_id
+                root_children_ids = [
+                    b.block_id for b in blocks 
+                    if getattr(b, 'parent_id', None) == doc_id and b.block_type != 1
+                ]
+            else:
+                # Last resort: if we really can't determine structure, 
+                # exclude known child types like TableCell (32) but this is risky
+                root_children_ids = [
+                    b.block_id for b in blocks 
+                    if b.block_type != 1 and b.block_type != 32
+                ]
+
         for block_id in root_children_ids:
             block = self.block_map.get(block_id)
             if not block:
