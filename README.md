@@ -107,9 +107,24 @@ npm start
 
 1. 访问 [飞书开放平台](https://open.feishu.cn/app)
 2. 创建**企业自建应用**
-3. 配置权限：`docx:document`, `drive:drive`, `drive:file`
-4. 回调地址：`http://127.0.0.1:8000/callback`
-5. **创建版本并发布**
+3. 添加应用能力：**网页应用**
+4. 配置权限（见下文权限列表）
+5. 配置回调地址：`http://127.0.0.1:8000/callback`
+6. **创建版本并发布上线**
+
+### 权限配置
+
+本项目需要以下飞书 API 权限：
+
+| 权限标识 | 权限名称 | 用途 |
+|----------|----------|------|
+| `docx:document` | 查看、评论和下载云文档 | 读取云文档内容 |
+| `docx:document:readonly` | 查看云文档 | 获取文档块列表 |
+| `drive:drive` | 查看、评论和下载云空间中所有文件 | 访问云空间文件 |
+| `drive:drive:readonly` | 查看云空间中文件夹结构 | 列出文件夹内容 |
+| `drive:file:upload` | 上传文件到云空间 | 上传图片和附件 |
+
+> **提示**：首次使用需要 OAuth 授权获取 User Access Token。程序会自动打开浏览器完成授权流程。
 
 ### 配置文件
 
@@ -128,6 +143,49 @@ npm start
   }]
 }
 ```
+
+### API 文档参考
+
+本项目基于 [飞书开放平台 API](https://open.feishu.cn/document/home/index) 开发，主要使用以下 API：
+
+<details>
+<summary><b>📄 云文档 API (DocX)</b></summary>
+
+| API | 用途 | 文档链接 |
+|-----|------|----------|
+| 获取文档所有块 | 读取文档内容 | [list blocks](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document-block/list) |
+| 创建块 | 添加文档内容 | [create block](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document-block-children/create) |
+| 更新块 | 修改内容 | [patch block](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document-block/patch) |
+| 删除块 | 删除内容 | [delete children](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document-block-children/batch_delete) |
+| 创建文档 | 新建文档 | [create docx](https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document/create) |
+
+</details>
+
+<details>
+<summary><b>📂 云空间 API (Drive)</b></summary>
+
+| API | 用途 | 文档链接 |
+|-----|------|----------|
+| 上传文件 | 上传图片/附件 | [upload file](https://open.feishu.cn/document/server-docs/docs/drive-v1/media/upload_all) |
+| 下载文件 | 下载云端图片 | [download file](https://open.feishu.cn/document/server-docs/docs/drive-v1/media/download) |
+| 创建文件夹 | 新建目录 | [create folder](https://open.feishu.cn/document/server-docs/docs/drive-v1/folder/create_folder) |
+| 列出文件 | 获取目录列表 | [list files](https://open.feishu.cn/document/server-docs/docs/drive-v1/folder/list) |
+| 获取元数据 | 获取文件信息 | [get file meta](https://open.feishu.cn/document/server-docs/docs/drive-v1/file/get) |
+| 删除文件 | 删除文件/文件夹 | [delete file](https://open.feishu.cn/document/server-docs/docs/drive-v1/file/delete) |
+
+</details>
+
+<details>
+<summary><b>🔐 认证 API (Auth)</b></summary>
+
+| API | 用途 | 文档链接 |
+|-----|------|----------|
+| 获取 App Access Token | 应用认证 | [app access token](https://open.feishu.cn/document/server-docs/authentication-management/access-token/app_access_token_internal) |
+| 获取 User Access Token | 用户授权 | [user access token](https://open.feishu.cn/document/server-docs/authentication-management/access-token/create) |
+| 刷新 User Access Token | 刷新令牌 | [refresh token](https://open.feishu.cn/document/server-docs/authentication-management/access-token/create-2) |
+
+</details>
+
 
 ---
 
