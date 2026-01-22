@@ -218,20 +218,21 @@ class SyncManager:
         else:
             logger.info(f"差异分析: 发现 {ops_count} 处变更。使用增量同步...", icon="📊")
             
-            batch_updates = []
+            sync_failed = False
             
             for tag, i1, i2, j1, j2 in reversed(opcodes):
                 if tag == 'replace':
-                    # Try in-place update for 1:1 replacements
+                    # Try recursive sync for 1:1 replacements
                     if i2 - i1 == 1 and j2 - j1 == 1:
-                        update = self._try_update_block_content(
+                        success = self._recursive_sync_block(
                             root_children[i1], local_blocks[j1]
                         )
-                        if update:
-                            batch_updates.append(update)
+                        if success:
                             continue
+                        else:
+                            sync_failed = True
                     
-                    # Fallback: delete and add (including when update returns None)
+                    # Fallback: delete and add
                     logger.debug(f"增量删除并添加: 位置 {i1}-{i2} -> {j1}-{j2}")
                     self.client.delete_blocks_by_index(self.doc_token, i1, i2)
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
@@ -242,20 +243,86 @@ class SyncManager:
                     logger.debug(f"增量插入: 位置 {i1}, 块数 {j2-j1}")
                     self.client.add_blocks(self.doc_token, local_blocks[j1:j2], index=i1)
             
-            if batch_updates:
-                logger.info(f"执行 {len(batch_updates)} 个块内容更新...", icon="✏️")
-                result = self.client.batch_update_blocks(self.doc_token, batch_updates)
-                if result:
-                    logger.debug(f"批量更新成功: {len(result)} 个块")
-                else:
-                    # Fallback: if batch update fails, use full overwrite
-                    logger.warning("批量更新失败，使用全量覆盖模式...")
-                    self.client.clear_document(self.doc_token)
-                    self.client.add_blocks(self.doc_token, local_blocks)
+            if sync_failed:
+                logger.warning("部分增量更新失败，使用全量覆盖...")
+                self.client.clear_document(self.doc_token)
+                self.client.add_blocks(self.doc_token, local_blocks)
         
         logger.success(f"同步完成！文档链接: https://feishu.cn/docx/{self.doc_token}")
         # Update local mtime to ensure next run sees it as current
         os.utime(self.md_path, None)
+
+    def _recursive_sync_block(self, cloud_block: Dict, local_block: Dict) -> bool:
+        """Recursively sync a block and its children.
+        
+        Returns True if sync was successful, False if should fallback to delete+add.
+        """
+        cloud_type = cloud_block.get("block_type")
+        local_type = local_block.get("block_type")
+        
+        # Type mismatch - can't update in place
+        if cloud_type != local_type:
+            logger.debug(f"块类型不匹配: cloud={cloud_type}, local={local_type}")
+            return False
+        
+        block_id = cloud_block.get("block_id")
+        if not block_id:
+            return False
+        
+        cloud_children = cloud_block.get("children_data") or []
+        local_children = local_block.get("children") or []
+        
+        # Children count mismatch - structural change, need delete+add
+        if len(cloud_children) != len(local_children):
+            logger.debug(f"子结构数量不同 (cloud: {len(cloud_children)}, local: {len(local_children)})")
+            return False
+        
+        # Update current block's text content
+        TEXT_BLOCK_TYPES = {
+            2: "text", 3: "heading1", 4: "heading2", 5: "heading3",
+            6: "heading4", 7: "heading5", 8: "heading6", 9: "heading7",
+            10: "heading8", 11: "heading9", 12: "bullet", 13: "ordered",
+            14: "code", 15: "quote", 17: "todo"
+        }
+        
+        field_name = TEXT_BLOCK_TYPES.get(cloud_type)
+        if field_name:
+            local_data = local_block.get(field_name, {})
+            elements = local_data.get("elements", [])
+            
+            if elements:
+                # Check if content actually differs
+                cloud_data = cloud_block.get(field_name, {})
+                cloud_elements = cloud_data.get("elements", [])
+                
+                cloud_content = ''.join([e.get('text_run', {}).get('content', '') for e in cloud_elements])
+                local_content = ''.join([e.get('text_run', {}).get('content', '') for e in elements])
+                
+                if cloud_content != local_content:
+                    logger.debug(f"更新块 {block_id[:12]}... 内容: '{cloud_content[:20]}' -> '{local_content[:20]}'")
+                    success = self.client.update_block_text(self.doc_token, block_id, elements)
+                    if not success:
+                        logger.warning(f"块 {block_id[:12]}... 更新失败")
+                        return False
+        
+        # Recursively sync children
+        for cloud_child, local_child in zip(cloud_children, local_children):
+            cloud_child_hash = self._calculate_tree_hash(cloud_child)
+            local_child_hash = self._calculate_tree_hash(local_child)
+            
+            if cloud_child_hash != local_child_hash:
+                success = self._recursive_sync_block(cloud_child, local_child)
+                if not success:
+                    # Child sync failed, trigger full rebuild for this branch
+                    # We need to delete and re-add this child
+                    child_id = cloud_child.get("block_id")
+                    if child_id:
+                        logger.debug(f"子块 {child_id[:12]}... 需要重建")
+                        # For now, return False to trigger parent-level fallback
+                        # TODO: Could implement delete+add for individual child
+                        return False
+        
+        return True
 
     def _try_update_block_content(self, cloud_block: Dict, local_block: Dict) -> Optional[Dict]:
         """Try to create an update request if block types match.
