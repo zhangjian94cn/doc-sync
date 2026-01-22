@@ -848,7 +848,7 @@ input:checked+.slider:before {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 5000;
+    z-index: 15000;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s;
@@ -909,6 +909,13 @@ input:checked+.slider:before {
 }
 
 /* --- List View for Tasks (Optimized) --- */
+.tasks-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 20px;
+}
+
 .task-list-item {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);

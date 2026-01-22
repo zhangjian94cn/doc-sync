@@ -308,6 +308,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('run-health-check-btn')?.addEventListener('click', runHealthCheck);
     document.getElementById('clean-backups-btn')?.addEventListener('click', cleanBackups);
 
+    // Clear log button - fix: moved inside DOMContentLoaded to ensure DOM is ready
+    document.getElementById('clear-log-btn')?.addEventListener('click', () => {
+        logOutput.innerHTML = '<div class="log-placeholder">' + t('ready') + '</div>';
+    });
+
     // Modal bindings
     document.getElementById('modal-close').addEventListener('click', hideModal);
     document.getElementById('modal-cancel').addEventListener('click', hideModal);
@@ -375,10 +380,6 @@ function log(msg) {
         logOutput.scrollTop = logOutput.scrollHeight;
     }
 }
-
-document.getElementById('clear-log-btn').addEventListener('click', () => {
-    logOutput.innerHTML = '<div class="log-placeholder">' + t('ready') + '</div>';
-});
 
 // --- Sync Control ---
 startSyncBtn.addEventListener('click', () => {
