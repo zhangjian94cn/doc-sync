@@ -56,6 +56,12 @@ app.on('activate', () => {
 function getPythonPath() {
   const isDev = !app.isPackaged;
   if (isDev) {
+    // Use venv python in development mode
+    const venvPython = path.join(__dirname, '..', 'venv', 'bin', 'python3');
+    if (fs.existsSync(venvPython)) {
+      return { command: venvPython, args: ['main.py'] };
+    }
+    // Fallback to system python if venv not found
     return { command: 'python3', args: ['main.py'] };
   } else {
     let execName = process.platform === 'win32' ? 'doc-sync-core.exe' : 'doc-sync-core';
