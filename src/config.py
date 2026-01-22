@@ -24,7 +24,9 @@ AUTH_SERVER_PORT: int = 8000
 BATCH_CHUNK_SIZE: int = 10
 
 # Threshold for full sync vs incremental sync (number of changes)
-SYNC_DIFF_THRESHOLD: int = 15
+# Set to 0 to always use full overwrite (default, more reliable)
+# Set to higher value (e.g., 15) to enable incremental sync
+SYNC_DIFF_THRESHOLD: int = 0
 
 # Maximum workers for parallel operations
 MAX_PARALLEL_WORKERS: int = 4

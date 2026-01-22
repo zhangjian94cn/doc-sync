@@ -1,6 +1,6 @@
 {
   "name": "docsync",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Obsidian → Feishu/Lark document sync tool with desktop GUI",
   "main": "electron_main.js",
   "scripts": {
