@@ -83,7 +83,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         
         for attempt in range(API_MAX_RETRIES):
             try:
-                resp = requests_module.post(url, headers=headers, json=body, timeout=30)
+                resp = requests_module.post(url, headers=headers, json=body, timeout=90)
                 
                 if resp.status_code == 429 or (resp.status_code == 200 and resp.json().get("code") == 99991400):
                     if attempt < API_MAX_RETRIES - 1:
@@ -141,7 +141,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         for attempt in range(API_MAX_RETRIES):
             try:
                 self._rate_limit()
-                resp = requests_module.patch(url, headers=headers, json=body, timeout=30)
+                resp = requests_module.patch(url, headers=headers, json=body, timeout=90)
                 
                 if resp.status_code == 429 or (resp.status_code == 200 and resp.json().get("code") == 99991400):
                     if attempt < API_MAX_RETRIES - 1:
@@ -418,7 +418,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             for attempt in range(API_MAX_RETRIES):
                 try:
                     self._rate_limit()
-                    resp = requests_module.post(url, headers=headers, json=body, timeout=30)
+                    resp = requests_module.post(url, headers=headers, json=body, timeout=90)
                     
                     if resp.status_code == 429:
                         if attempt < API_MAX_RETRIES - 1:
@@ -746,7 +746,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             url = "https://open.feishu.cn/open-apis/drive/explorer/v2/root_folder/meta"
             token = self.user_access_token or self._get_tenant_access_token()
             headers = {"Authorization": f"Bearer {token}"}
-            resp = requests_module.get(url, headers=headers, timeout=10)
+            resp = requests_module.get(url, headers=headers, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("code") == 0:
