@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import os
-from src.sync.folder import FolderSyncManager
+from doc_sync.sync.folder import FolderSyncManager
 
 class TestFolderSyncLogic(unittest.TestCase):
     def setUp(self):
@@ -10,16 +10,16 @@ class TestFolderSyncLogic(unittest.TestCase):
         self.state_mock = MagicMock()
         
         # Patch SyncState to return our mock
-        self.state_patcher = patch('src.sync.folder.SyncState', return_value=self.state_mock)
+        self.state_patcher = patch('doc_sync.sync.folder.SyncState', return_value=self.state_mock)
         self.state_patcher.start()
         
     def tearDown(self):
         self.state_patcher.stop()
 
-    @patch('src.sync.folder.os.listdir')
-    @patch('src.sync.folder.os.path.isdir')
-    @patch('src.sync.folder.os.path.exists')
-    @patch('src.sync.folder.os.makedirs')
+    @patch('doc_sync.sync.folder.os.listdir')
+    @patch('doc_sync.sync.folder.os.path.isdir')
+    @patch('doc_sync.sync.folder.os.path.exists')
+    @patch('doc_sync.sync.folder.os.makedirs')
     def test_collect_tasks_logic(self, mock_makedirs, mock_exists, mock_isdir, mock_listdir):
         # Setup common mocks
         manager = FolderSyncManager("/local", "cloud_root", client=self.client_mock)
@@ -94,8 +94,8 @@ class TestFolderSyncLogic(unittest.TestCase):
         self.assertIsNotNone(task_delete)
         self.assertEqual(task_delete["type"], "delete_cloud")
 
-    @patch('src.sync.folder.os.listdir')
-    @patch('src.sync.folder.os.path.isdir')
+    @patch('doc_sync.sync.folder.os.listdir')
+    @patch('doc_sync.sync.folder.os.path.isdir')
     def test_collect_tasks_new_local_file(self, mock_isdir, mock_listdir):
         manager = FolderSyncManager("/local", "cloud_root", client=self.client_mock)
         

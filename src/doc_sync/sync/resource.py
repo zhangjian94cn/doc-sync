@@ -5,7 +5,7 @@ Provides efficient resource lookup by caching file locations.
 
 import os
 from typing import Dict, Optional, Set
-from src.logger import logger
+from doc_sync.logger import logger
 
 
 class ResourceIndex:

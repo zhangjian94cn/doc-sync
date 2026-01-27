@@ -10,12 +10,12 @@ from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
-from src import config
-from src.feishu_client import FeishuClient
-from src.logger import logger
+from doc_sync import config
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.logger import logger
 
 
-from src.sync.state import SyncState
+from doc_sync.sync.state import SyncState
 
 class FolderSyncManager:
     """Manages folder-level synchronization with concurrent file processing."""
@@ -44,7 +44,7 @@ class FolderSyncManager:
     def run(self):
         """Run folder synchronization with concurrent file processing."""
         # Import here to avoid circular imports
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
         self._stats_lock = threading.Lock()
         
@@ -176,11 +176,16 @@ class FolderSyncManager:
                     # This means user DELETED it locally.
                     # Action: Delete from Cloud.
                     logger.info(f"检测到本地删除: '{name}'，正在同步删除云端文件...", icon="🗑️")
+                    
+                    # Reconstruct absolute local path from state
+                    rel_path = self.state.token_map.get(file.token, name)
+                    local_abs_path = os.path.join(self.vault_root, rel_path)
+                    
                     tasks.append({
                         "type": "delete_cloud",
                         "doc_token": file.token,
                         "file_type": file.type,
-                        "local_path": known_info.get("path", name) # Just for logging
+                        "local_path": local_abs_path
                     })
                     continue
                 
@@ -218,7 +223,13 @@ class FolderSyncManager:
             
             if task_type == "delete_cloud":
                 self.client.delete_file(task["doc_token"], file_type=task.get("file_type", "docx"))
-                self.state.remove_by_token(task["doc_token"])
+                
+                # If folder, recursively remove from state
+                if task.get("file_type") == "folder":
+                    self.state.remove_directory(task["local_path"])
+                else:
+                    self.state.remove_by_token(task["doc_token"])
+                    
                 return "deleted_cloud"
             
             # Normal Sync

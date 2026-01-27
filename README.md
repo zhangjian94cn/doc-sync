@@ -28,7 +28,25 @@
 
 ## 🚀 快速开始
 
-### 命令行方式
+### 安装 (推荐)
+
+您可以直接通过 pip 安装本项目，安装后可使用 `docsync` 命令：
+
+```bash
+git clone https://github.com/zhangjian94cn/doc-sync.git
+cd doc-sync
+pip install .
+
+# 配置
+docsync setup
+
+# 同步
+docsync sync
+```
+
+### 开发模式
+
+如果您不想安装，也可以直接运行源码：
 
 ```bash
 git clone https://github.com/zhangjian94cn/doc-sync.git
@@ -36,7 +54,7 @@ cd doc-sync
 pip install -r requirements.txt
 
 # 配置
-python scripts/cli.py setup
+python main.py setup  # 或者 python scripts/cli.py setup
 
 # 同步
 python main.py
@@ -60,12 +78,12 @@ npm start
 
 | 命令 | 说明 |
 |------|------|
-| `python scripts/cli.py setup` | 配置向导 |
-| `python scripts/cli.py check` | 健康检查 |
-| `python scripts/cli.py sync` | 执行同步 |
-| `python scripts/cli.py restore <path>` | 还原备份 |
-| `python scripts/cli.py clean` | 清理备份 |
-| `python main.py --force` | 强制覆盖云端（忽略云端更新） |
+| `docsync setup` | 配置向导 |
+| `docsync check` | 健康检查 |
+| `docsync sync` | 执行同步 |
+| `docsync restore <path>` | 还原备份 |
+| `docsync clean` | 清理备份 |
+| `docsync sync --force` | 强制覆盖云端（忽略云端更新） |
 | `python main.py --overwrite` | 全量覆盖模式（清空云端后重新上传） |
 | `python scripts/download_doc.py <doc_id>` | 下载飞书文档为 Markdown |
 | `python scripts/compare_docs.py <local_file> <doc_token>` | 对比本地与云端文档 |

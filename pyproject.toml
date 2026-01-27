@@ -53,11 +53,11 @@ Repository = "https://github.com/zhangjian94cn/doc-sync.git"
 Issues = "https://github.com/zhangjian94cn/doc-sync/issues"
 
 [project.scripts]
-docsync = "main:main"
+docsync = "doc_sync.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+where = ["src"]
+include = ["doc_sync*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,7 +70,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["doc_sync"]
 omit = ["tests/*", "*/__pycache__/*"]
 
 [tool.coverage.report]

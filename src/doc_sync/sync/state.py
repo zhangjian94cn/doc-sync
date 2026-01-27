@@ -1,7 +1,7 @@
 import json
 import os
 from typing import Dict, Optional
-from src.logger import logger
+from doc_sync.logger import logger
 
 class SyncState:
     """
@@ -59,6 +59,31 @@ class SyncState:
                 del self.token_map[token]
             del self.data[rel_path]
             self.save()
+
+    def remove_directory(self, abs_path: str):
+        """Recursively remove all records under a directory."""
+        rel_path = self._get_rel_path(abs_path)
+        # Ensure directory path ends with separator to match children but not siblings with similar prefix
+        prefix = rel_path + os.sep
+        to_remove = []
+        
+        # Identify keys to remove
+        for path in list(self.data.keys()):
+            if path == rel_path or path.startswith(prefix):
+                to_remove.append(path)
+        
+        if not to_remove:
+            return
+            
+        logger.debug(f"Removing {len(to_remove)} state records under: {rel_path}")
+        
+        for path in to_remove:
+            token = self.data[path].get("token")
+            if token and token in self.token_map:
+                del self.token_map[token]
+            del self.data[path]
+            
+        self.save()
 
     def remove_by_token(self, token: str):
         if token in self.token_map:

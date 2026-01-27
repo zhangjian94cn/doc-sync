@@ -11,7 +11,7 @@ import re
 import os
 from typing import List, Dict, Any, Optional, Callable
 
-from src.logger import logger
+from doc_sync.logger import logger
 
 
 class FeishuToMarkdown:

@@ -69,3 +69,11 @@ electron-app/resources/python/*
 # Temporary files
 tmp/
 temp/
+# AI Agents
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.windsurf/

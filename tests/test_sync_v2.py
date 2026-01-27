@@ -4,12 +4,12 @@ import os
 import tempfile
 import json
 import hashlib
-from src.feishu_client import FeishuClient
-from src.sync import FolderSyncManager
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.sync import FolderSyncManager
 
 class TestSyncV2(unittest.TestCase):
     def setUp(self):
-        self.patcher = patch('src.feishu_client.lark')
+        self.patcher = patch('doc_sync.feishu_client.lark')
         self.mock_lark = self.patcher.start()
         
     def tearDown(self):
@@ -29,7 +29,7 @@ class TestSyncV2(unittest.TestCase):
             
         try:
             # Patch requests_module in the actual module where it's used
-            with patch('src.feishu.media.requests_module') as mock_requests:
+            with patch('doc_sync.feishu.media.requests_module') as mock_requests:
                 # Setup mock response for first upload
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
@@ -56,10 +56,10 @@ class TestSyncV2(unittest.TestCase):
         finally:
             os.remove(path)
 
-    @patch('src.sync.folder.os.listdir')
-    @patch('src.sync.folder.os.path.isdir')
-    @patch('src.sync.folder.os.path.exists')
-    @patch('src.sync.folder.SyncState')
+    @patch('doc_sync.sync.folder.os.listdir')
+    @patch('doc_sync.sync.folder.os.path.isdir')
+    @patch('doc_sync.sync.folder.os.path.exists')
+    @patch('doc_sync.sync.folder.SyncState')
     def test_sync_deletion(self, MockSyncState, mock_exists, mock_isdir, mock_listdir):
         # Setup
         client = MagicMock()
@@ -122,7 +122,7 @@ class TestIncrementalSync(unittest.TestCase):
     """Test incremental sync block update functionality."""
     
     def setUp(self):
-        self.patcher = patch('src.feishu_client.lark')
+        self.patcher = patch('doc_sync.feishu_client.lark')
         self.mock_lark = self.patcher.start()
         
     def tearDown(self):
@@ -130,9 +130,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_matching_types(self):
         """Test that matching block types generate update requests."""
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
-        with patch('src.sync.manager.config'):
+        with patch('doc_sync.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -156,9 +156,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_different_types(self):
         """Test that different block types return None (no update)."""
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
-        with patch('src.sync.manager.config'):
+        with patch('doc_sync.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -180,9 +180,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_heading_types(self):
         """Test update for heading block types."""
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
-        with patch('src.sync.manager.config'):
+        with patch('doc_sync.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"
@@ -209,9 +209,9 @@ class TestIncrementalSync(unittest.TestCase):
     
     def test_try_update_block_content_list_types(self):
         """Test update for bullet and ordered list types."""
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
-        with patch('src.sync.manager.config'):
+        with patch('doc_sync.sync.manager.config'):
             manager = SyncManager.__new__(SyncManager)
             manager.client = MagicMock()
             manager.doc_token = "test_doc"

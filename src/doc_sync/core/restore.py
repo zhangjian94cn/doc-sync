@@ -4,7 +4,7 @@ import shutil
 import glob
 import difflib
 from datetime import datetime
-from src.logger import logger
+from doc_sync.logger import logger
 
 def parse_backup_timestamp(filename):
     """

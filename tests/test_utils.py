@@ -3,7 +3,7 @@ Unit tests for the utils module.
 """
 
 import pytest
-from src.utils import pad_center, parse_cloud_time
+from doc_sync.utils import pad_center, parse_cloud_time
 
 
 class TestPadCenter:

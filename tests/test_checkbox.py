@@ -1,6 +1,6 @@
 """Tests for Checkbox/Todo conversion."""
 import pytest
-from src.converter import MarkdownToFeishu
+from doc_sync.converter import MarkdownToFeishu
 
 
 class TestCheckboxConversion:

@@ -11,7 +11,7 @@ from typing import Optional
 
 import requests as requests_module
 
-from src.logger import logger
+from doc_sync.logger import logger
 
 
 class MediaOperationsMixin:

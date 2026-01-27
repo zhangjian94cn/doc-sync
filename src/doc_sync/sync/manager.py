@@ -17,13 +17,18 @@ import difflib
 
 import lark_oapi as lark
 
-from src import config
-from src.config import SYNC_DIFF_THRESHOLD
-from src.feishu_client import FeishuClient
-from src.converter import MarkdownToFeishu, FeishuToMarkdown
-from src.utils import pad_center, parse_cloud_time
-from src.logger import logger
-from src.sync.resource import ResourceIndex
+from doc_sync import config
+from doc_sync.config import SYNC_DIFF_THRESHOLD
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.converter import MarkdownToFeishu, FeishuToMarkdown
+from doc_sync.utils import pad_center, parse_cloud_time
+from doc_sync.logger import logger
+from doc_sync.sync.resource import ResourceIndex
+
+
+class SyncError(Exception):
+    """Custom exception for sync operation errors."""
+    pass
 
 
 class SyncError(Exception):

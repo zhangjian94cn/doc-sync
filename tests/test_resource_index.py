@@ -4,7 +4,7 @@ Unit tests for the resource_index module.
 
 import os
 import pytest
-from src.sync import ResourceIndex
+from doc_sync.sync import ResourceIndex
 
 
 class TestResourceIndex:

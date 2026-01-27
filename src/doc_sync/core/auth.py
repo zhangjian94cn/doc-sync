@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 
 import requests
 
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, AUTH_SERVER_PORT
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, AUTH_SERVER_PORT
 
 REDIRECT_URI = f"http://127.0.0.1:{AUTH_SERVER_PORT}/callback"
 ENV_FILE = ".env"
@@ -110,7 +110,7 @@ class FeishuAuthenticator:
         return None
 
     def save_tokens_to_config(self, access_token, refresh_token=None):
-        from src import config
+        from doc_sync import config
         config.save_tokens(access_token, refresh_token)
         print("✅ Tokens saved to sync_config.json")
 
@@ -156,7 +156,7 @@ class FeishuAuthenticator:
             return None
 
     def refresh(self):
-        from src import config
+        from doc_sync import config
         refresh_token = config.FEISHU_USER_REFRESH_TOKEN
         
         if not refresh_token:

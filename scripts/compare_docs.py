@@ -25,13 +25,14 @@ import argparse
 import difflib
 from typing import Optional, List, Dict, Any
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add project src to path
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(root_dir, "src"))
 
-from src.feishu_client import FeishuClient
-from src.converter import MarkdownToFeishu, FeishuToMarkdown
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
-from src.logger import logger
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.converter import MarkdownToFeishu, FeishuToMarkdown
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
+from doc_sync.logger import logger
 
 
 # ANSI colors

@@ -19,14 +19,14 @@ from typing import Any, Dict, List, Optional
 import lark_oapi as lark
 import requests as requests_module
 
-from src.logger import logger
-from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
+from doc_sync.logger import logger
+from doc_sync.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 # Import base and mixin classes
-from src.feishu.base import FeishuClientBase
-from src.feishu.blocks import BlockOperationsMixin
-from src.feishu.documents import DocumentOperationsMixin
-from src.feishu.media import MediaOperationsMixin
+from doc_sync.feishu.base import FeishuClientBase
+from doc_sync.feishu.blocks import BlockOperationsMixin
+from doc_sync.feishu.documents import DocumentOperationsMixin
+from doc_sync.feishu.media import MediaOperationsMixin
 
 
 class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMixin, MediaOperationsMixin):
@@ -83,7 +83,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         
         for attempt in range(API_MAX_RETRIES):
             try:
-                resp = requests_module.post(url, headers=headers, json=body, timeout=30)
+                resp = requests_module.post(url, headers=headers, json=body, timeout=90)
                 
                 if resp.status_code == 429 or (resp.status_code == 200 and resp.json().get("code") == 99991400):
                     if attempt < API_MAX_RETRIES - 1:
@@ -141,7 +141,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         for attempt in range(API_MAX_RETRIES):
             try:
                 self._rate_limit()
-                resp = requests_module.patch(url, headers=headers, json=body, timeout=30)
+                resp = requests_module.patch(url, headers=headers, json=body, timeout=90)
                 
                 if resp.status_code == 429 or (resp.status_code == 200 and resp.json().get("code") == 99991400):
                     if attempt < API_MAX_RETRIES - 1:
@@ -418,7 +418,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             for attempt in range(API_MAX_RETRIES):
                 try:
                     self._rate_limit()
-                    resp = requests_module.post(url, headers=headers, json=body, timeout=30)
+                    resp = requests_module.post(url, headers=headers, json=body, timeout=90)
                     
                     if resp.status_code == 429:
                         if attempt < API_MAX_RETRIES - 1:
@@ -746,7 +746,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             url = "https://open.feishu.cn/open-apis/drive/explorer/v2/root_folder/meta"
             token = self.user_access_token or self._get_tenant_access_token()
             headers = {"Authorization": f"Bearer {token}"}
-            resp = requests_module.get(url, headers=headers, timeout=10)
+            resp = requests_module.get(url, headers=headers, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("code") == 0:

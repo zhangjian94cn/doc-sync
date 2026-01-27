@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Optional
 import lark_oapi as lark
 from lark_oapi.api.docx.v1 import *
 
-from src.logger import logger
-from src.config import API_MAX_RETRIES, API_RETRY_BASE_DELAY
+from doc_sync.logger import logger
+from doc_sync.config import API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 
 class DocumentOperationsMixin:

@@ -16,9 +16,9 @@ import json
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.converter import MarkdownToFeishu
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET
-from src.feishu_client import FeishuClient
+from doc_sync.converter import MarkdownToFeishu
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET
+from doc_sync.feishu_client import FeishuClient
 
 
 # 测试用的 Markdown 内容

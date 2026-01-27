@@ -9,11 +9,11 @@ class TestUpdateBlockText:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
@@ -162,12 +162,12 @@ class TestGetBlock:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             mock_lark.JSON.marshal.return_value = '{"block_type": 2, "text": {"elements": []}}'
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
@@ -180,7 +180,7 @@ class TestGetBlock:
         mock_client.client.docx.v1.document_block.get.return_value = mock_response
         
         # Patch lark in the module where it's actually used
-        with patch('src.feishu.blocks.lark') as mock_lark:
+        with patch('doc_sync.feishu.blocks.lark') as mock_lark:
             mock_lark.JSON.marshal.return_value = '{"block_type": 2, "text": {"elements": [{"text_run": {"content": "Hello"}}]}}'
             
             result = mock_client.get_block("doc123", "block456")
@@ -208,18 +208,18 @@ class TestBatchUpdateBlocks:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
     
     def test_batch_update_text_elements(self, mock_client):
         """Test batch updating text elements."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -250,7 +250,7 @@ class TestBatchUpdateBlocks:
     
     def test_batch_update_text_style(self, mock_client):
         """Test batch updating text styles."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -275,7 +275,7 @@ class TestBatchUpdateBlocks:
     
     def test_batch_update_table_operations(self, mock_client):
         """Test batch updating with table operations."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -302,7 +302,7 @@ class TestBatchUpdateBlocks:
     
     def test_batch_update_failure(self, mock_client):
         """Test handling of batch update failure."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -317,7 +317,7 @@ class TestBatchUpdateBlocks:
     
     def test_batch_update_rate_limit_retry(self, mock_client):
         """Test batch update retries on rate limit."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             # First call returns rate limit, second succeeds
             mock_response_429 = Mock()
             mock_response_429.status_code = 429
@@ -343,18 +343,18 @@ class TestGetBlockChildren:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
     
     def test_get_children_success(self, mock_client):
         """Test successful retrieval of child blocks."""
-        with patch('src.feishu.blocks.requests_module') as mock_requests:
+        with patch('doc_sync.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -376,7 +376,7 @@ class TestGetBlockChildren:
     
     def test_get_children_with_descendants(self, mock_client):
         """Test retrieval with descendants flag."""
-        with patch('src.feishu.blocks.requests_module') as mock_requests:
+        with patch('doc_sync.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -403,7 +403,7 @@ class TestGetBlockChildren:
     
     def test_get_children_pagination(self, mock_client):
         """Test pagination handling."""
-        with patch('src.feishu.blocks.requests_module') as mock_requests:
+        with patch('doc_sync.feishu.blocks.requests_module') as mock_requests:
             # First page with page_token
             page1_response = Mock()
             page1_response.status_code = 200
@@ -435,7 +435,7 @@ class TestGetBlockChildren:
     
     def test_get_children_failure(self, mock_client):
         """Test handling of API failure."""
-        with patch('src.feishu.blocks.requests_module') as mock_requests:
+        with patch('doc_sync.feishu.blocks.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -450,7 +450,7 @@ class TestGetBlockChildren:
     
     def test_get_children_rate_limit_retry(self, mock_client):
         """Test rate limit retry logic."""
-        with patch('src.feishu.blocks.requests_module') as mock_requests:
+        with patch('doc_sync.feishu.blocks.requests_module') as mock_requests:
             # First call returns rate limit error in body, second succeeds
             mock_response_limited = Mock()
             mock_response_limited.status_code = 200
@@ -480,11 +480,11 @@ class TestDeleteBlockChildren:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
@@ -553,18 +553,18 @@ class TestConvertContentToBlocks:
     @pytest.fixture
     def mock_client(self):
         """Create a mock FeishuClient."""
-        with patch('src.feishu_client.lark') as mock_lark:
+        with patch('doc_sync.feishu_client.lark') as mock_lark:
             mock_lark_client = MagicMock()
             mock_lark.Client.builder.return_value.app_id.return_value.app_secret.return_value.enable_set_token.return_value.log_level.return_value.build.return_value = mock_lark_client
             
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient("test_id", "test_secret", "test_token")
             client.client = mock_lark_client
             yield client
     
     def test_convert_markdown_success(self, mock_client):
         """Test successful Markdown conversion."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -587,7 +587,7 @@ class TestConvertContentToBlocks:
     
     def test_convert_html_content(self, mock_client):
         """Test HTML content conversion."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -609,7 +609,7 @@ class TestConvertContentToBlocks:
     
     def test_convert_with_table(self, mock_client):
         """Test conversion with table content."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -631,7 +631,7 @@ class TestConvertContentToBlocks:
     
     def test_convert_failure(self, mock_client):
         """Test handling of conversion failure."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -646,7 +646,7 @@ class TestConvertContentToBlocks:
     
     def test_convert_rate_limit_retry(self, mock_client):
         """Test rate limit retry logic."""
-        with patch('src.feishu_client.requests_module') as mock_requests:
+        with patch('doc_sync.feishu_client.requests_module') as mock_requests:
             mock_response_429 = Mock()
             mock_response_429.status_code = 429
             

@@ -1,4 +1,4 @@
-from src.converter import MarkdownToFeishu
+from doc_sync.converter import MarkdownToFeishu
 
 def test_extract_frontmatter():
     converter = MarkdownToFeishu()

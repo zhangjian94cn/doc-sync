@@ -1,7 +1,7 @@
 import os
 import json
 import pytest
-from src.sync.state import SyncState
+from doc_sync.sync.state import SyncState
 
 def test_sync_state_init(temp_vault):
     """Test SyncState initialization."""
