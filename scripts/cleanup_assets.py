@@ -19,11 +19,11 @@ import json
 from collections import defaultdict
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from src.feishu_client import FeishuClient
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
-from src.logger import logger
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
+from doc_sync.logger import logger
 import lark_oapi as lark
 
 

@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Optional
 import requests as requests_module
 import lark_oapi as lark
 
-from src.logger import logger
-from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
+from doc_sync.logger import logger
+from doc_sync.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 
 class FeishuClientBase:

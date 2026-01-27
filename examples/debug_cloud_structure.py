@@ -14,9 +14,9 @@ import sys
 import json
 import lark_oapi as lark
 
-from src.feishu_client import FeishuClient
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
-from src.converter import FeishuToMarkdown
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
+from doc_sync.converter import FeishuToMarkdown
 
 
 def inspect_block(block, depth=0):

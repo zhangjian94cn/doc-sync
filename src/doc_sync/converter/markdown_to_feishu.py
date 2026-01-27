@@ -3,7 +3,7 @@ import os
 from typing import List, Dict, Any, Optional, Callable
 from markdown_it import MarkdownIt
 
-from src.logger import logger
+from doc_sync.logger import logger
 
 class MarkdownToFeishu:
     """Convert Markdown content to Feishu document blocks."""

@@ -20,9 +20,9 @@ import time
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET
-from src.feishu_client import FeishuClient
-from src.logger import logger
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.logger import logger
 
 # 从环境变量获取文件夹 token
 FEISHU_FOLDER_TOKEN = os.environ.get("FEISHU_FOLDER_TOKEN", "")

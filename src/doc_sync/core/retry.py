@@ -8,8 +8,8 @@ from functools import wraps
 from typing import TypeVar, Callable, Optional, Tuple, Type
 import requests
 
-from src.logger import logger
-from src.config import API_MAX_RETRIES, API_RETRY_BASE_DELAY
+from doc_sync.logger import logger
+from doc_sync.config import API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 
 T = TypeVar('T')

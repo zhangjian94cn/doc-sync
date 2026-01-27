@@ -18,9 +18,9 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.feishu_client import FeishuClient
-from src.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
-from src.converter import FeishuToMarkdown
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
+from doc_sync.converter import FeishuToMarkdown
 
 
 def count_tables(md_content: str) -> int:

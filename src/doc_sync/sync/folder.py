@@ -10,12 +10,12 @@ from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
-from src import config
-from src.feishu_client import FeishuClient
-from src.logger import logger
+from doc_sync import config
+from doc_sync.feishu_client import FeishuClient
+from doc_sync.logger import logger
 
 
-from src.sync.state import SyncState
+from doc_sync.sync.state import SyncState
 
 class FolderSyncManager:
     """Manages folder-level synchronization with concurrent file processing."""
@@ -44,7 +44,7 @@ class FolderSyncManager:
     def run(self):
         """Run folder synchronization with concurrent file processing."""
         # Import here to avoid circular imports
-        from src.sync.manager import SyncManager
+        from doc_sync.sync.manager import SyncManager
         
         self._stats_lock = threading.Lock()
         

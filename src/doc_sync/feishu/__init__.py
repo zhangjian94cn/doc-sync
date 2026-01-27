@@ -10,26 +10,26 @@ Package Structure:
     - media.py: Media operations (upload/download image/file)
 
 Usage:
-    from src.feishu import FeishuClient
+    from doc_sync.feishu import FeishuClient
     
     # Or import specific mixins for custom clients
-    from src.feishu.base import FeishuClientBase
-    from src.feishu.blocks import BlockOperationsMixin
-    from src.feishu.documents import DocumentOperationsMixin
-    from src.feishu.media import MediaOperationsMixin
+    from doc_sync.feishu.base import FeishuClientBase
+    from doc_sync.feishu.blocks import BlockOperationsMixin
+    from doc_sync.feishu.documents import DocumentOperationsMixin
+    from doc_sync.feishu.media import MediaOperationsMixin
 """
 
 # Export base class and mixins (no circular import)
-from src.feishu.base import FeishuClientBase
-from src.feishu.blocks import BlockOperationsMixin
-from src.feishu.documents import DocumentOperationsMixin
-from src.feishu.media import MediaOperationsMixin
+from doc_sync.feishu.base import FeishuClientBase
+from doc_sync.feishu.blocks import BlockOperationsMixin
+from doc_sync.feishu.documents import DocumentOperationsMixin
+from doc_sync.feishu.media import MediaOperationsMixin
 
 
 def __getattr__(name):
     """Lazy import FeishuClient to avoid circular import."""
     if name == 'FeishuClient':
-        from src.feishu_client import FeishuClient
+        from doc_sync.feishu_client import FeishuClient
         return FeishuClient
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

@@ -19,14 +19,14 @@ from typing import Any, Dict, List, Optional
 import lark_oapi as lark
 import requests as requests_module
 
-from src.logger import logger
-from src.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
+from doc_sync.logger import logger
+from doc_sync.config import BATCH_CHUNK_SIZE, API_MAX_RETRIES, API_RETRY_BASE_DELAY
 
 # Import base and mixin classes
-from src.feishu.base import FeishuClientBase
-from src.feishu.blocks import BlockOperationsMixin
-from src.feishu.documents import DocumentOperationsMixin
-from src.feishu.media import MediaOperationsMixin
+from doc_sync.feishu.base import FeishuClientBase
+from doc_sync.feishu.blocks import BlockOperationsMixin
+from doc_sync.feishu.documents import DocumentOperationsMixin
+from doc_sync.feishu.media import MediaOperationsMixin
 
 
 class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMixin, MediaOperationsMixin):

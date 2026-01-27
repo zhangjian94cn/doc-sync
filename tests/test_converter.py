@@ -3,7 +3,7 @@ Unit tests for the converter module.
 """
 
 import pytest
-from src.converter import MarkdownToFeishu, FeishuToMarkdown
+from doc_sync.converter import MarkdownToFeishu, FeishuToMarkdown
 
 
 class TestMarkdownToFeishu:

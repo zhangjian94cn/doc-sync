@@ -18,7 +18,7 @@ import importlib.util
 
 # 添加项目根目录到路径
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 os.chdir(PROJECT_ROOT)
 
 
@@ -212,7 +212,7 @@ def cmd_check(args):
     # 4. 飞书连接
     if results[-1][1]:  # 配置存在才测试连接
         try:
-            from src.feishu_client import FeishuClient
+            from doc_sync.feishu_client import FeishuClient
             client = FeishuClient(config["feishu_app_id"], config["feishu_app_secret"])
             token = client._get_tenant_access_token()
             (ok if token else fail)(f"API 连接 {'正常' if token else '失败'}")

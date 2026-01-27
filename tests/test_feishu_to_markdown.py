@@ -7,7 +7,7 @@ Tests the conversion of Feishu blocks to Markdown with mock block objects.
 import pytest
 from unittest.mock import Mock, MagicMock
 
-from src.converter import FeishuToMarkdown
+from doc_sync.converter import FeishuToMarkdown
 
 
 class MockBlock:
