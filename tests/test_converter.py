@@ -147,6 +147,31 @@ def hello():
         image_blocks = [b for b in blocks if b.get("block_type") == 27]
         assert len(image_blocks) == 1
     
+    def test_parse_divider(self):
+        """Test parsing horizontal rule / divider (---, ***, ___, etc.)."""
+        converter = MarkdownToFeishu()
+        
+        # Test basic --- divider
+        blocks = converter.parse("Text above\n\n---\n\nText below")
+        divider_blocks = [b for b in blocks if b.get("block_type") == 22]
+        assert len(divider_blocks) == 1
+        assert "divider" in divider_blocks[0]
+        
+        # Test with more dashes
+        blocks = converter.parse("Above\n\n-----\n\nBelow")
+        divider_blocks = [b for b in blocks if b.get("block_type") == 22]
+        assert len(divider_blocks) == 1
+        
+        # Test with asterisks
+        blocks = converter.parse("Above\n\n***\n\nBelow")
+        divider_blocks = [b for b in blocks if b.get("block_type") == 22]
+        assert len(divider_blocks) == 1
+        
+        # Test with underscores
+        blocks = converter.parse("Above\n\n___\n\nBelow")
+        divider_blocks = [b for b in blocks if b.get("block_type") == 22]
+        assert len(divider_blocks) == 1
+    
     def test_parse_complex_document(self, sample_markdown):
         """Test parsing a complex markdown document."""
         converter = MarkdownToFeishu()

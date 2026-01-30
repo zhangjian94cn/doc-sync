@@ -379,6 +379,13 @@ class MarkdownToFeishu:
                     "code": {"elements": [{"text_run": {"content": content}}]}
                 }
             
+            # Handle horizontal rule / divider (---, ***, ___, etc.)
+            elif token.type == 'hr':
+                block = {
+                    "block_type": 22,  # Divider
+                    "divider": {}
+                }
+            
             # Handle blockquote
             elif token.type == 'blockquote_open':
                 # We'll collect content in the next paragraph
