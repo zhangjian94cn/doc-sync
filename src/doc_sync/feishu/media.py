@@ -57,21 +57,32 @@ class MediaOperationsMixin:
         self._rate_limit()
         
         try:
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type:
+                mime_type = 'application/octet-stream'
+                
             with open(file_path, 'rb') as f:
-                files = {'file': (file_name, f)}
+                files = {'file': (file_name, f, mime_type)}
                 data = {
                     'file_name': file_name,
                     'parent_type': 'docx_image',
                     'parent_node': parent_node_token,
-                    'size': str(file_size)
+                    'size': str(file_size),
                 }
+                # 添加 extra 参数，包含 drive_route_token，这是让图片在云文档中正确显示的关键
+                if drive_route_token:
+                    import json
+                    data['extra'] = json.dumps({'drive_route_token': drive_route_token})
                 
-                resp = requests_module.post(url, headers=headers, files=files, data=data, timeout=60)
+                logger.debug(f"Uploading image: {file_name} ({file_size} bytes) to {parent_node_token}")
+                resp = requests_module.post(url, headers=headers, files=files, data=data, timeout=120)
                 
                 if resp.status_code == 200:
                     result = resp.json()
                     if result.get("code") == 0:
                         file_token = result.get("data", {}).get("file_token")
+                        logger.info(f"Image uploaded successfully: {file_name} -> {file_token}")
                         
                         # Cache the result
                         if file_token:
@@ -80,12 +91,14 @@ class MediaOperationsMixin:
                         
                         return file_token
                     else:
-                        logger.error(f"Image upload failed: {result.get('code')} {result.get('msg')}")
+                        logger.error(f"Image upload failed for {file_name}: {result.get('code')} {result.get('msg')} - Request ID: {result.get('request_id')}")
                 else:
-                    logger.error(f"Image upload HTTP error: {resp.status_code}")
+                    logger.error(f"Image upload HTTP error for {file_name}: {resp.status_code} - {resp.text}")
                     
         except Exception as e:
-            logger.error(f"Image upload exception: {e}")
+            logger.error(f"Image upload exception for {file_name}: {e}")
+            import traceback
+            traceback.print_exc()
         
         return None
 
@@ -162,8 +175,13 @@ class MediaOperationsMixin:
         self._rate_limit()
         
         try:
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type:
+                mime_type = 'application/octet-stream'
+
             with open(file_path, 'rb') as f:
-                files = {'file': (file_name, f)}
+                files = {'file': (file_name, f, mime_type)}
                 data = {
                     'file_name': file_name,
                     'parent_type': p_type,
@@ -171,12 +189,14 @@ class MediaOperationsMixin:
                     'size': str(file_size)
                 }
                 
+                logger.debug(f"Uploading file: {file_name} ({file_size} bytes) to {parent_node_token}")
                 resp = requests_module.post(url, headers=headers, files=files, data=data, timeout=120)
                 
                 if resp.status_code == 200:
                     result = resp.json()
                     if result.get("code") == 0:
                         file_token = result.get("data", {}).get("file_token")
+                        logger.info(f"File uploaded successfully: {file_name} -> {file_token}")
                         
                         # Cache the result
                         if file_token:
@@ -185,12 +205,14 @@ class MediaOperationsMixin:
                         
                         return file_token
                     else:
-                        logger.error(f"File upload failed: {result.get('code')} {result.get('msg')}")
+                        logger.error(f"File upload failed for {file_name}: {result.get('code')} {result.get('msg')} - Request ID: {result.get('request_id')}")
                 else:
-                    logger.error(f"File upload HTTP error: {resp.status_code}")
+                    logger.error(f"File upload HTTP error for {file_name}: {resp.status_code} - {resp.text}")
                     
         except Exception as e:
-            logger.error(f"File upload exception: {e}")
+            logger.error(f"File upload exception for {file_name}: {e}")
+            import traceback
+            traceback.print_exc()
         
         return None
 

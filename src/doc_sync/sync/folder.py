@@ -85,6 +85,7 @@ class FolderSyncManager:
         logger.summary_table("📊 同步汇总", {
             "✅ 新增/下载": self.stats['created'],
             "🔄 更新": self.stats['updated'],
+            "⏭️ 跳过(未变更)": self.stats['skipped'],
             "🗑️ 云端删除": self.stats['deleted_cloud'],
             "❌ 失败": self.stats['failed']
         })
@@ -132,6 +133,18 @@ class FolderSyncManager:
                 if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
                     token = cloud_map[doc_name].token
                     used_cloud_tokens.add(token)
+                    
+                    # 检查文件是否自上次同步后有变更
+                    known_info = self.state.get_by_path(item_path)
+                    if known_info and not self.force and not self.overwrite:
+                        last_sync_time = known_info.get("last_sync", 0)
+                        current_mtime = os.path.getmtime(item_path)
+                        if abs(current_mtime - last_sync_time) < 1:  # 1秒容差
+                            # 文件未变更，跳过
+                            with self._stats_lock:
+                                self.stats["skipped"] += 1
+                            continue
+                    
                     tasks.append({
                         "type": "sync",
                         "local_path": item_path,

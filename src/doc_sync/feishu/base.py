@@ -49,7 +49,9 @@ class FeishuClientBase:
             .build()
         
         self.asset_cache_path = os.path.join(os.path.expanduser("~"), ".doc_sync", "assets_cache.json")
-        self._asset_cache = self._load_asset_cache()
+        # 每次运行时清除缓存，确保图片重新上传（避免旧 token 失效问题）
+        self._asset_cache = {}
+        self._clear_asset_cache()
     
     def _rate_limit(self):
         """Ensure minimum interval between API requests."""
@@ -78,6 +80,14 @@ class FeishuClientBase:
                 json.dump(self._asset_cache, f)
         except Exception as e:
             logger.warning(f"Failed to save asset cache: {e}")
+
+    def _clear_asset_cache(self):
+        """Clear asset cache file on disk."""
+        try:
+            if os.path.exists(self.asset_cache_path):
+                os.remove(self.asset_cache_path)
+        except Exception as e:
+            logger.debug(f"Failed to clear asset cache: {e}")
 
     def _calculate_file_hash(self, file_path: str) -> str:
         """Calculate SHA256 hash of a file."""
