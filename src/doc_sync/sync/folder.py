@@ -131,16 +131,26 @@ class FolderSyncManager:
             elif item.endswith(".md"):
                 doc_name = item[:-3]
                 if doc_name in cloud_map and cloud_map[doc_name].type == "docx":
-                    token = cloud_map[doc_name].token
+                    cloud_file = cloud_map[doc_name]
+                    token = cloud_file.token
                     used_cloud_tokens.add(token)
                     
-                    # 检查文件是否自上次同步后有变更
+                    # 获取云端修改时间 (modified_time 是秒级时间戳字符串)
+                    cloud_mtime = float(getattr(cloud_file, 'modified_time', 0) or 0)
+                    
+                    # 检查文件是否自上次同步后有变更（本地和云端都检查）
                     known_info = self.state.get_by_path(item_path)
                     if known_info and not self.force and not self.overwrite:
                         last_sync_time = known_info.get("last_sync", 0)
+                        last_cloud_mtime = known_info.get("cloud_mtime", 0)
                         current_mtime = os.path.getmtime(item_path)
-                        if abs(current_mtime - last_sync_time) < 1:  # 1秒容差
-                            # 文件未变更，跳过
+                        
+                        # 只有本地和云端都没变更才跳过
+                        local_unchanged = abs(current_mtime - last_sync_time) < 1
+                        cloud_unchanged = abs(cloud_mtime - last_cloud_mtime) < 1
+                        
+                        if local_unchanged and cloud_unchanged:
+                            # 两端都未变更，跳过
                             with self._stats_lock:
                                 self.stats["skipped"] += 1
                             continue
@@ -149,10 +159,10 @@ class FolderSyncManager:
                         "type": "sync",
                         "local_path": item_path,
                         "doc_token": token,
-                        "is_new": False
+                        "is_new": False,
+                        "cloud_mtime": cloud_mtime  # 传递云端修改时间
                     })
-                    # Update state
-                    self.state.update(item_path, token)
+                    # 不在这里更新 state，而是在同步成功后更新
                 else:
                     # Check if it was known before (Maybe deleted on Cloud?)
                     known_info = self.state.get_by_path(item_path)
@@ -257,8 +267,9 @@ class FolderSyncManager:
             )
             sync.run(debug=self.debug)
             
-            # Update state on success
-            self.state.update(task["local_path"], task["doc_token"])
+            # Update state on success (包含云端修改时间)
+            cloud_mtime = task.get("cloud_mtime", 0)
+            self.state.update(task["local_path"], task["doc_token"], cloud_mtime=cloud_mtime)
             
             return "created" if task.get("is_new") else "updated"
         except Exception as e:

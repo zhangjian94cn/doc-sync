@@ -41,12 +41,13 @@ class SyncState:
             return os.path.relpath(abs_path, self.root_path)
         return abs_path
 
-    def update(self, abs_path: str, token: str, type: str = "docx"):
+    def update(self, abs_path: str, token: str, type: str = "docx", cloud_mtime: float = 0):
         rel_path = self._get_rel_path(abs_path)
         self.data[rel_path] = {
             "token": token,
             "type": type,
-            "last_sync": os.path.getmtime(abs_path) if os.path.exists(abs_path) else 0
+            "last_sync": os.path.getmtime(abs_path) if os.path.exists(abs_path) else 0,
+            "cloud_mtime": cloud_mtime  # 存储云端修改时间
         }
         self.token_map[token] = rel_path
         self.save()
