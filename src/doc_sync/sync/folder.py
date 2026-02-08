@@ -122,10 +122,14 @@ class FolderSyncManager:
             if os.path.isdir(item_path):
                 if item in cloud_map and cloud_map[item].type == "folder":
                     used_cloud_tokens.add(cloud_map[item].token)
+                    # Record folder in state for tracking deletions
+                    self.state.update(item_path, cloud_map[item].token, type="folder")
                     tasks.extend(self._collect_sync_tasks(item_path, cloud_map[item].token))
                 else:
                     new_token = self.client.create_folder(cloud_token, item)
                     if new_token:
+                        # Record new folder in state
+                        self.state.update(item_path, new_token, type="folder")
                         tasks.extend(self._collect_sync_tasks(item_path, new_token))
                         
             elif item.endswith(".md"):
@@ -195,22 +199,64 @@ class FolderSyncManager:
                 known_info = self.state.get_by_token(file.token)
                 
                 if known_info:
-                    # It was in our state, but NOT found in local scan (otherwise it would be in used_cloud_tokens).
-                    # This means user DELETED it locally.
-                    # Action: Delete from Cloud.
-                    logger.info(f"检测到本地删除: '{name}'，正在同步删除云端文件...", icon="🗑️")
+                    # Token exists in state - but not matched in local scan.
+                    # This could be:
+                    # 1. Local file was DELETED -> should delete from cloud
+                    # 2. Cloud file was RENAMED -> should NOT delete, but sync rename to local
                     
-                    # Reconstruct absolute local path from state
-                    rel_path = self.state.token_map.get(file.token, name)
-                    local_abs_path = os.path.join(self.vault_root, rel_path)
-                    
-                    tasks.append({
-                        "type": "delete_cloud",
-                        "doc_token": file.token,
-                        "file_type": file.type,
-                        "local_path": local_abs_path
-                    })
-                    continue
+                    # Get the original local path from state
+                    rel_path = self.state.token_map.get(file.token)
+                    if rel_path:
+                        original_local_path = os.path.join(self.vault_root, rel_path)
+                        
+                        # Check if the original local file still exists
+                        if os.path.exists(original_local_path):
+                            # Case 2: Cloud file was RENAMED (local file with old name still exists)
+                            # We should rename the local file to match cloud name
+                            if file.type == "docx":
+                                new_local_name = name + ".md"
+                            else:
+                                new_local_name = name
+                            new_local_path = os.path.join(local_path, new_local_name)
+                            
+                            # Rename local file/folder to match cloud name
+                            if original_local_path != new_local_path:
+                                try:
+                                    os.rename(original_local_path, new_local_path)
+                                    logger.info(f"检测到云端重命名: '{os.path.basename(original_local_path)}' -> '{new_local_name}'，已同步本地", icon="✏️")
+                                    
+                                    # Update state with new path
+                                    self.state.remove(original_local_path)
+                                    self.state.update(new_local_path, file.token, type=file.type)
+                                except OSError as e:
+                                    logger.error(f"重命名本地文件失败: {e}")
+                            
+                            # Add to used_cloud_tokens since we handled it
+                            used_cloud_tokens.add(file.token)
+                            
+                            # If it's a folder, recursively process
+                            if file.type == "folder":
+                                tasks.extend(self._collect_sync_tasks(new_local_path, file.token))
+                            continue
+                        else:
+                            # Case 1: Local file was truly DELETED
+                            # Safety check: only delete if we have evidence of a real sync (last_sync > 0)
+                            last_sync = known_info.get("last_sync", 0)
+                            if last_sync > 0:
+                                logger.info(f"检测到本地删除: '{name}'，正在同步删除云端文件...", icon="🗑️")
+                                tasks.append({
+                                    "type": "delete_cloud",
+                                    "doc_token": file.token,
+                                    "file_type": file.type,
+                                    "local_path": original_local_path
+                                })
+                            else:
+                                # State record exists but no real sync happened - treat as new cloud file
+                                logger.warning(f"状态异常: '{name}' 在状态文件中存在但未实际同步过，将作为云端新增处理", icon="⚠️")
+                                # Remove the stale state record
+                                self.state.remove_by_token(file.token)
+                                # Fall through to handle as new cloud file (don't continue)
+                            continue
                 
                 # Not in state -> New on Cloud -> Download
                 if file.type == "docx":
@@ -228,11 +274,30 @@ class FolderSyncManager:
 
                 elif file.type == "folder":
                     local_folder_path = os.path.join(local_path, name)
-                    if not os.path.exists(local_folder_path):
-                        os.makedirs(local_folder_path)
-                        logger.info(f"发现云端新增文件夹: '{name}'，已创建本地目录", icon="📂")
                     
-                    tasks.extend(self._collect_sync_tasks(local_folder_path, file.token))
+                    # Check if this folder was known in our state
+                    known_folder = self.state.get_by_token(file.token)
+                    
+                    if known_folder:
+                        # Folder was previously synced - user deleted it locally
+                        # Action: Delete from Cloud
+                        logger.info(f"检测到本地删除文件夹: '{name}'，正在同步删除云端...", icon="🗑️")
+                        tasks.append({
+                            "type": "delete_cloud",
+                            "doc_token": file.token,
+                            "file_type": "folder",
+                            "local_path": local_folder_path
+                        })
+                    else:
+                        # New folder on Cloud - download
+                        if not os.path.exists(local_folder_path):
+                            os.makedirs(local_folder_path)
+                            logger.info(f"发现云端新增文件夹: '{name}'，已创建本地目录", icon="📂")
+                        
+                        # Record this folder in state
+                        self.state.update(local_folder_path, file.token, type="folder")
+                        
+                        tasks.extend(self._collect_sync_tasks(local_folder_path, file.token))
                 
                 else:
                     logger.info(f"跳过云端非文档文件: '{name}' ({file.type})", icon="⏭️")
