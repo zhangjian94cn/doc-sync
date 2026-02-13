@@ -511,12 +511,14 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                 if b_type == 31:  # Table
                     table_data = d.get("table", {})
                     prop = table_data.get("property", {})
+                    tp_builder = TableProperty.builder() \
+                        .row_size(prop.get("row_size", 1)) \
+                        .column_size(prop.get("column_size", 1))
+                    if prop.get("column_width"):
+                        tp_builder.column_width(prop["column_width"])
                     block_builder.table(
                         Table.builder().property(
-                            TableProperty.builder()
-                                .row_size(prop.get("row_size", 1))
-                                .column_size(prop.get("column_size", 1))
-                                .build()
+                            tp_builder.build()
                         ).build()
                     )
                 elif b_type == 32:  # TableCell
@@ -594,6 +596,10 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
             "children": [],
             "table": {"property": {"row_size": row_size, "column_size": col_size}}
         }
+        # Pass column_width if provided
+        column_width = prop.get("column_width")
+        if column_width:
+            table_desc["table"]["property"]["column_width"] = column_width
         
         for cell in children:
             cell_id = f"cell_{uuid.uuid4().hex[:8]}"

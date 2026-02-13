@@ -134,7 +134,7 @@ class MarkdownToFeishu:
         """Convert parsed table rows to a native Feishu Table block (type 31).
         
         Structure:
-        - Table (31) with property (row_size, column_size)
+        - Table (31) with property (row_size, column_size, column_width)
         - Children are TableCell (32) blocks  
         - Each TableCell contains Text (2) blocks
         
@@ -169,17 +169,65 @@ class MarkdownToFeishu:
                 }
                 cell_blocks.append(cell_block)
         
+        # Calculate column widths based on content length
+        column_width = self._calculate_column_widths(table_rows, row_size, col_size)
+        
+        table_property = {
+            "row_size": row_size,
+            "column_size": col_size
+        }
+        if column_width:
+            table_property["column_width"] = column_width
+        
         return {
             "block_type": 31,
             "table": {
-                "property": {
-                    "row_size": row_size,
-                    "column_size": col_size
-                }
+                "property": table_property
             },
             "children": cell_blocks,
             "_is_native_table": True  # Flag for sync to use descendants API
         }
+
+    def _calculate_column_widths(self, table_rows: List[Dict], 
+                                  row_size: int, col_size: int) -> List[int]:
+        """Calculate column widths proportionally based on content length.
+        
+        Strategy:
+        - Compute max content length per column across all rows
+        - Distribute total width (proportional) across columns
+        - Clamp each column width between MIN_COL_WIDTH and MAX_COL_WIDTH
+        
+        Returns:
+            List of column widths in pixels
+        """
+        MIN_COL_WIDTH = 80
+        MAX_COL_WIDTH = 600
+        # Total width available for the table in Feishu document
+        TOTAL_WIDTH = min(col_size * MAX_COL_WIDTH, 1300)
+        
+        # Calculate max content length per column
+        max_lengths = [0] * col_size
+        for row in table_rows:
+            cells = row['cells']
+            for col_idx in range(min(len(cells), col_size)):
+                cell = cells[col_idx]
+                elements = cell.get("elements", [])
+                text_len = sum(
+                    len(e.get("text_run", {}).get("content", ""))
+                    for e in elements
+                )
+                max_lengths[col_idx] = max(max_lengths[col_idx], text_len)
+        
+        # Avoid all-zero case
+        total_len = sum(max_lengths)
+        if total_len == 0:
+            return [TOTAL_WIDTH // col_size] * col_size
+        
+        # Proportional distribution with clamping
+        raw_widths = [(length / total_len) * TOTAL_WIDTH for length in max_lengths]
+        widths = [max(MIN_COL_WIDTH, min(MAX_COL_WIDTH, int(w))) for w in raw_widths]
+        
+        return widths
 
     def _extract_frontmatter(self, text: str) -> tuple[str, Optional[Dict[str, str]]]:
         """Extract YAML front matter from text."""
@@ -544,6 +592,10 @@ class MarkdownToFeishu:
                 style = {"inline_code": True}
                 element = {"text_run": {"content": child.content, "text_element_style": style}}
                 current_elements.append(element)
+            elif child.type == 'html_inline':
+                # Handle <br> / <br/> / <br /> tags as newlines
+                if re.match(r'<br\s*/?>', child.content, re.IGNORECASE):
+                    current_elements.append({"text_run": {"content": "\n"}})
             elif child.type == 'softbreak': current_elements.append({"text_run": {"content": "\n"}})
             elif child.type == 'hardbreak': current_elements.append({"text_run": {"content": "\n"}})
             i += 1
@@ -582,6 +634,10 @@ class MarkdownToFeishu:
                 style = {"inline_code": True}
                 element = {"text_run": {"content": child.content, "text_element_style": style}}
                 elements.append(element)
+            elif child.type == 'html_inline':
+                # Handle <br> / <br/> / <br /> tags as newlines
+                if re.match(r'<br\s*/?>', child.content, re.IGNORECASE):
+                    elements.append({"text_run": {"content": "\n"}})
             elif child.type == 'softbreak': elements.append({"text_run": {"content": "\n"}})
             elif child.type == 'hardbreak': elements.append({"text_run": {"content": "\n"}})
         if not elements: return {"elements": [{"text_run": {"content": ""}}]}
