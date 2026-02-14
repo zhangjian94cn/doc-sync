@@ -15,6 +15,14 @@ from doc_sync.feishu_client import FeishuClient
 from doc_sync.logger import logger
 from doc_sync.config import FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_USER_ACCESS_TOKEN
 
+
+def _ensure_client(user_token=None):
+    """Create an authenticated FeishuClient, handling token refresh as needed."""
+    if not user_token:
+        user_token = FEISHU_USER_ACCESS_TOKEN
+    client = FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, user_access_token=user_token)
+    return client, user_token
+
 def load_config(config_path: str) -> list:
     """
     Load sync tasks from configuration file.
@@ -138,6 +146,11 @@ def run_single_task(local_path, cloud_token, force, overwrite=False, note="", ta
         manager.run(debug=debug)
 
 def main():
+    # Route to bitable subcommand if first arg is 'bitable'
+    if len(sys.argv) > 1 and sys.argv[1] == "bitable":
+        bitable_main()
+        return
+    
     parser = argparse.ArgumentParser(
         description="DocSync: 双向同步 Obsidian (Markdown) 与 飞书云文档",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -150,10 +163,14 @@ def main():
   2. 使用配置文件批量同步 (默认读取 sync_config.json):
      docsync
 
-  3. 还原备份:
+  3. 多维表格操作:
+     docsync bitable push data.csv --app-token bascnXXX
+     docsync bitable pull --app-token bascnXXX --table-id tblXXX -o output.csv
+
+  4. 还原备份:
      docsync --restore /path/to/folder_or_file
 
-  4. 清理旧备份:
+  5. 清理旧备份:
      docsync --clean
 """
     )
@@ -370,6 +387,141 @@ def main():
             traceback.print_exc()
             
     logger.header(f"批量同步完成。成功: {success_count}/{total_count}", icon="🏁")
+
+
+def bitable_main():
+    """CLI entry point for Bitable (多维表格) operations."""
+    parser = argparse.ArgumentParser(
+        prog="docsync bitable",
+        description="DocSync Bitable: 同步本地数据与飞书多维表格",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="""
+示例:
+  1. 上传 CSV 到多维表格:
+     docsync bitable push data.csv --app-token bascnXXX
+
+  2. 从多维表格下载到 CSV:
+     docsync bitable pull --app-token bascnXXX --table-id tblXXX -o output.csv
+
+  3. 增量同步 (默认):
+     docsync bitable push data.csv --app-token bascnXXX --table-id tblXXX --key-field "名称"
+
+  4. 全量覆盖同步:
+     docsync bitable push data.csv --app-token bascnXXX --table-id tblXXX --overwrite
+
+  5. 使用配置文件批量同步:
+     docsync bitable sync
+"""
+    )
+    
+    subparsers = parser.add_subparsers(dest="action", help="操作类型")
+    
+    # Push: Local → Cloud
+    push_parser = subparsers.add_parser("push", help="上传本地数据到飞书多维表格")
+    push_parser.add_argument("source", help="本地数据文件路径 (CSV/JSON/Markdown)")
+    push_parser.add_argument("--app-token", required=True, help="多维表格 App Token")
+    push_parser.add_argument("--table-id", help="目标数据表 ID (留空则自动创建)")
+    push_parser.add_argument("--table-name", help="数据表名称 (创建新表时使用)")
+    push_parser.add_argument("--key-field", help="用于增量同步的唯一标识字段名")
+    push_parser.add_argument("--overwrite", action="store_true", help="全量覆盖模式 (清空后重新上传)")
+    
+    # Pull: Cloud → Local  
+    pull_parser = subparsers.add_parser("pull", help="从飞书多维表格下载数据到本地")
+    pull_parser.add_argument("--app-token", required=True, help="多维表格 App Token")
+    pull_parser.add_argument("--table-id", required=True, help="数据表 ID")
+    pull_parser.add_argument("-o", "--output", required=True, help="输出文件路径 (CSV/JSON)")
+    pull_parser.add_argument("--format", choices=["csv", "json"], help="输出格式 (默认根据扩展名)")
+    
+    # Sync: from config file
+    sync_parser = subparsers.add_parser("sync", help="使用配置文件同步多维表格")
+    sync_parser.add_argument("--config", default="sync_config.json", help="配置文件路径")
+    
+    # Info: show app info
+    info_parser = subparsers.add_parser("info", help="查看多维表格信息")
+    info_parser.add_argument("--app-token", required=True, help="多维表格 App Token")
+    
+    args = parser.parse_args(sys.argv[2:])  # Skip 'docsync bitable'
+    
+    if not args.action:
+        parser.print_help()
+        return
+    
+    from doc_sync.sync.bitable_sync import BitableSyncManager
+    
+    client, user_token = _ensure_client()
+    
+    if args.action == "push":
+        logger.header("多维表格同步: 上传", icon="⬆️")
+        logger.info(f"数据源: {args.source}", icon="📄")
+        
+        manager = BitableSyncManager(
+            client=client,
+            app_token=args.app_token,
+            table_id=args.table_id,
+            table_name=args.table_name,
+            key_field=args.key_field,
+            overwrite=args.overwrite,
+        )
+        result = manager.push(args.source)
+        logger.info(str(result))
+        
+    elif args.action == "pull":
+        logger.header("多维表格同步: 下载", icon="⬇️")
+        
+        manager = BitableSyncManager(
+            client=client,
+            app_token=args.app_token,
+            table_id=args.table_id,
+        )
+        result = manager.pull(args.output, output_format=args.format)
+        logger.info(str(result))
+        
+    elif args.action == "sync":
+        logger.header("多维表格批量同步", icon="🔄")
+        config_path = args.config
+        tasks = load_config(config_path)
+        bitable_tasks = [t for t in tasks if t.get("type") == "bitable" and t.get("enabled", True)]
+        
+        if not bitable_tasks:
+            logger.warning("配置文件中没有启用的多维表格任务")
+            return
+        
+        for task in bitable_tasks:
+            note = task.get("note", task.get("local", "Unknown"))
+            logger.header(f"处理任务: {note}", icon="📌")
+            
+            manager = BitableSyncManager(
+                client=client,
+                app_token=task["app_token"],
+                table_id=task.get("table_id"),
+                table_name=task.get("table_name"),
+                key_field=task.get("key_field"),
+                overwrite=task.get("overwrite", False),
+            )
+            
+            direction = task.get("sync_direction", "local_to_cloud")
+            if direction == "local_to_cloud":
+                result = manager.push(task["local"])
+            elif direction == "cloud_to_local":
+                result = manager.pull(task["local"])
+            else:
+                logger.warning(f"不支持的同步方向: {direction}")
+                continue
+            
+            logger.info(str(result))
+        
+    elif args.action == "info":
+        info = client.bitable_get_app_info(args.app_token)
+        if info:
+            logger.info(f"多维表格: {info.get('name', 'Unknown')}")
+            tables = client.bitable_list_tables(args.app_token)
+            for t in tables:
+                fields = client.bitable_list_fields(args.app_token, t['table_id'])
+                records = client.bitable_list_records(args.app_token, t['table_id'], page_size=1)
+                logger.info(f"  📋 {t['name']} ({t['table_id']}): {len(fields)} 字段")
+        else:
+            logger.error("获取多维表格信息失败")
+
 
 if __name__ == "__main__":
     main()

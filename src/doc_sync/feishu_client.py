@@ -27,9 +27,10 @@ from doc_sync.feishu.base import FeishuClientBase
 from doc_sync.feishu.blocks import BlockOperationsMixin
 from doc_sync.feishu.documents import DocumentOperationsMixin
 from doc_sync.feishu.media import MediaOperationsMixin
+from doc_sync.feishu.bitable import BitableOperationsMixin
 
 
-class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMixin, MediaOperationsMixin):
+class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMixin, MediaOperationsMixin, BitableOperationsMixin):
     """
     Complete Feishu API client with all operations.
     
@@ -38,6 +39,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         - BlockOperationsMixin: Block CRUD operations
         - DocumentOperationsMixin: Document operations
         - MediaOperationsMixin: Image and file upload/download
+        - BitableOperationsMixin: Bitable (多维表格) operations
     
     Additional Methods:
         - add_blocks: Add blocks with nested structure support

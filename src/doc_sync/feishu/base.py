@@ -46,6 +46,7 @@ class FeishuClientBase:
             .app_secret(app_secret) \
             .enable_set_token(True) \
             .log_level(lark.LogLevel.INFO) \
+            .timeout(30) \
             .build()
         
         self.asset_cache_path = os.path.join(os.path.expanduser("~"), ".doc_sync", "assets_cache.json")

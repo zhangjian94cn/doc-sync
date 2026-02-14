@@ -8,6 +8,7 @@ Package Structure:
     - blocks.py: Block operations (get/update/delete/batch)
     - documents.py: Document operations (create/clear/list)
     - media.py: Media operations (upload/download image/file)
+    - bitable.py: Bitable (多维表格) operations (table/field/record/view)
 
 Usage:
     from doc_sync.feishu import FeishuClient
@@ -17,6 +18,7 @@ Usage:
     from doc_sync.feishu.blocks import BlockOperationsMixin
     from doc_sync.feishu.documents import DocumentOperationsMixin
     from doc_sync.feishu.media import MediaOperationsMixin
+    from doc_sync.feishu.bitable import BitableOperationsMixin
 """
 
 # Export base class and mixins (no circular import)
@@ -24,6 +26,7 @@ from doc_sync.feishu.base import FeishuClientBase
 from doc_sync.feishu.blocks import BlockOperationsMixin
 from doc_sync.feishu.documents import DocumentOperationsMixin
 from doc_sync.feishu.media import MediaOperationsMixin
+from doc_sync.feishu.bitable import BitableOperationsMixin
 
 
 def __getattr__(name):
@@ -40,5 +43,6 @@ __all__ = [
     'BlockOperationsMixin',
     'DocumentOperationsMixin',
     'MediaOperationsMixin',
+    'BitableOperationsMixin',
 ]
 
