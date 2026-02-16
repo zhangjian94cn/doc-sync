@@ -30,6 +30,7 @@
                 <button class="nav-item" data-tab="settings" data-i18n="settings">Settings</button>
                 <button class="nav-item" data-tab="tools" data-i18n="tools">Tools</button>
                 <button class="nav-item" data-tab="appearance" data-i18n="appearance">Appearance</button>
+                <button class="nav-item" data-tab="live-sync" data-i18n="liveSync">Live Sync</button>
             </nav>
 
             <div class="sidebar-footer">
@@ -271,6 +272,60 @@
                                 <input type="checkbox" id="cb-hide-traffic-lights">
                                 <span data-i18n="hideTrafficLights">Hide window controls (macOS only)</span>
                             </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Sync View -->
+            <div id="live-sync" class="view">
+                <div class="settings-container">
+                    <!-- Connection Setup -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 data-i18n="liveSyncConnection">Live Sync Connection</h3>
+                            <p data-i18n="liveSyncDesc">Connect to a document for real-time collaborative editing</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="live-connect-row">
+                                <div class="input-group" style="flex:1">
+                                    <label data-i18n="docToken">Document Token</label>
+                                    <input type="text" id="live-doc-token" placeholder="doxcnXXXXXX">
+                                </div>
+                                <div class="input-group" style="flex:0.6">
+                                    <label data-i18n="userName">Your Name</label>
+                                    <input type="text" id="live-user-name" placeholder="Alice">
+                                </div>
+                                <div class="input-group" style="flex:0.4">
+                                    <label data-i18n="wsPort">Port</label>
+                                    <input type="number" id="live-port" value="8765" min="1024" max="65535">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer" style="display:flex;gap:10px;align-items:center">
+                            <button id="live-connect-btn" class="primary-btn" data-i18n="liveConnect">Connect</button>
+                            <button id="live-disconnect-btn" class="secondary-btn" style="display:none"
+                                data-i18n="liveDisconnect">Disconnect</button>
+                            <div id="live-status" class="live-status-badge disconnected">
+                                <span class="live-dot"></span>
+                                <span id="live-status-text" data-i18n="disconnected">Disconnected</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Block List -->
+                    <div class="card" id="live-blocks-card" style="display:none">
+                        <div class="card-header">
+                            <h3 data-i18n="documentBlocks">Document Blocks</h3>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <button id="live-refresh-btn" class="icon-btn" title="Refresh">🔄</button>
+                                <span id="live-block-count" class="text-muted">0 blocks</span>
+                            </div>
+                        </div>
+                        <div class="card-body" style="padding:0">
+                            <div id="live-blocks-list" class="live-blocks-container">
+                                <!-- Block items rendered here by JS -->
+                            </div>
                         </div>
                     </div>
                 </div>

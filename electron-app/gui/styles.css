@@ -998,3 +998,191 @@ input:checked+.slider:before {
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
+
+/* --- Live Sync --- */
+.live-connect-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.live-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.live-status-badge.disconnected {
+    background: rgba(248, 81, 73, 0.12);
+    color: var(--danger-color);
+}
+
+.live-status-badge.connecting {
+    background: rgba(255, 152, 0, 0.12);
+    color: #ff9800;
+}
+
+.live-status-badge.connected {
+    background: rgba(46, 160, 67, 0.12);
+    color: var(--success-color);
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.live-status-badge.connected .live-dot {
+    box-shadow: 0 0 8px currentColor;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.live-blocks-container {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.live-block-item {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.live-block-item:last-child {
+    border-bottom: none;
+}
+
+.live-block-item:hover {
+    background-color: rgba(128, 128, 128, 0.05);
+}
+
+.live-block-item.locked-by-me {
+    border-left: 3px solid var(--accent-color);
+    background-color: rgba(0, 214, 185, 0.04);
+}
+
+.live-block-item.locked-by-other {
+    border-left: 3px solid var(--danger-color);
+    opacity: 0.8;
+}
+
+.live-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.live-block-type {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.live-block-lock {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.live-block-lock.free {
+    color: var(--text-secondary);
+}
+
+.live-block-lock.mine {
+    background: rgba(0, 214, 185, 0.15);
+    color: var(--accent-color);
+}
+
+.live-block-lock.other {
+    background: rgba(248, 81, 73, 0.12);
+    color: var(--danger-color);
+}
+
+.live-block-content {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.live-block-edit {
+    width: 100%;
+    min-height: 60px;
+    background: var(--bg-color);
+    border: 1px solid var(--accent-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    margin-top: 8px;
+}
+
+.live-block-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    justify-content: flex-end;
+}
+
+.live-block-actions button {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: none;
+    font-weight: 500;
+}
+
+.live-block-actions .save-btn {
+    background: var(--accent-color);
+    color: white;
+}
+
+.live-block-actions .cancel-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+input[type="number"] {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    width: 100%;
+}
+
+input[type="number"]:focus {
+    border-color: var(--accent-color);
+}

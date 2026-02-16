@@ -103,7 +103,19 @@ const i18n = {
         toastSaved: 'Configurations saved',
         toastDeleted: 'Task deleted',
         toastError: 'Operation failed',
-        overwriteSync: 'Full Overwrite (clear & reupload)'
+        overwriteSync: 'Full Overwrite (clear & reupload)',
+        liveSync: 'Live Sync',
+        liveSyncConnection: 'Live Sync Connection',
+        liveSyncDesc: 'Connect to a document for real-time collaborative editing',
+        liveConnect: 'Connect',
+        liveDisconnect: 'Disconnect',
+        disconnected: 'Disconnected',
+        connecting: 'Connecting...',
+        connected: 'Connected',
+        documentBlocks: 'Document Blocks',
+        docToken: 'Document Token',
+        userName: 'Your Name',
+        wsPort: 'Port'
     },
     zh: {
         brand: 'DocSync',
@@ -176,7 +188,19 @@ const i18n = {
         toastSaved: '配置已保存',
         toastDeleted: '任务已删除',
         toastError: '操作失败',
-        overwriteSync: '全量覆盖（清空后重写）'
+        overwriteSync: '全量覆盖（清空后重写）',
+        liveSync: '实时协同',
+        liveSyncConnection: '实时协同连接',
+        liveSyncDesc: '连接文档进行实时协同编辑',
+        liveConnect: '连接',
+        liveDisconnect: '断开',
+        disconnected: '未连接',
+        connecting: '连接中...',
+        connected: '已连接',
+        documentBlocks: '文档块',
+        docToken: '文档 Token',
+        userName: '你的名称',
+        wsPort: '端口'
     }
 };
 
@@ -630,3 +654,311 @@ function renderTasks() {
         tasksList.appendChild(item);
     });
 }
+
+// ===== Live Sync WebSocket Client =====
+(function initLiveSync() {
+    let ws = null;
+    let liveUser = '';
+    let liveBlocks = {};   // block_id -> block data
+    let liveLocks = {};    // block_id -> user
+    let editingBlockId = null;
+
+    const connectBtn = document.getElementById('live-connect-btn');
+    const disconnectBtn = document.getElementById('live-disconnect-btn');
+    const statusBadge = document.getElementById('live-status');
+    const statusText = document.getElementById('live-status-text');
+    const blocksCard = document.getElementById('live-blocks-card');
+    const blocksList = document.getElementById('live-blocks-list');
+    const blockCount = document.getElementById('live-block-count');
+    const refreshBtn = document.getElementById('live-refresh-btn');
+
+    if (!connectBtn) return; // guard if DOM not ready
+
+    function setStatus(state) {
+        statusBadge.className = 'live-status-badge ' + state;
+        statusText.textContent = t(state) || state;
+    }
+
+    function getBlockTextContent(block) {
+        // Extract text from Feishu block structure
+        const bt = block.block_type;
+        const typeMap = {
+            2: 'text', 3: 'heading1', 4: 'heading2', 5: 'heading3',
+            6: 'heading4', 7: 'heading5', 8: 'heading6', 9: 'heading7',
+            10: 'heading8', 11: 'heading9', 12: 'bullet', 13: 'ordered',
+            14: 'code', 15: 'quote', 17: 'todo', 22: 'callout'
+        };
+        const key = typeMap[bt];
+        if (key && block[key] && block[key].elements) {
+            return block[key].elements.map(el => {
+                if (el.text_run) return el.text_run.content || '';
+                if (el.mention_user) return '@user';
+                if (el.mention_doc) return '@doc';
+                return '';
+            }).join('');
+        }
+        // Fallback: show block type
+        return `[Block type ${bt}]`;
+    }
+
+    function getBlockTypeName(bt) {
+        const names = {
+            1: 'Page', 2: 'Text', 3: 'H1', 4: 'H2', 5: 'H3',
+            6: 'H4', 7: 'H5', 8: 'H6', 9: 'H7', 10: 'H8', 11: 'H9',
+            12: 'Bullet', 13: 'Ordered', 14: 'Code', 15: 'Quote',
+            16: 'Equation', 17: 'Todo', 18: 'Divider', 19: 'Image',
+            20: 'Table', 22: 'Callout', 23: 'Chat', 24: 'Diagram',
+            27: 'Grid', 28: 'Column'
+        };
+        return names[bt] || `Type-${bt}`;
+    }
+
+    function renderBlocks() {
+        const ids = Object.keys(liveBlocks);
+        blockCount.textContent = `${ids.length} blocks`;
+
+        if (ids.length === 0) {
+            blocksList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">No blocks loaded</div>';
+            return;
+        }
+
+        // Sort by parent position or just keep order
+        blocksList.innerHTML = '';
+        ids.forEach(bid => {
+            const block = liveBlocks[bid];
+            const bt = block.block_type;
+            if (bt === 1) return; // skip page root
+
+            const holder = liveLocks[bid];
+            const isMe = holder === liveUser;
+            const isOther = holder && !isMe;
+
+            const item = document.createElement('div');
+            item.className = 'live-block-item' +
+                (isMe ? ' locked-by-me' : '') +
+                (isOther ? ' locked-by-other' : '');
+            item.dataset.blockId = bid;
+
+            const lockLabel = isMe ? `🔒 ${liveUser} (you)` :
+                isOther ? `🔒 ${holder}` : '🔓 Free';
+            const lockClass = isMe ? 'mine' : isOther ? 'other' : 'free';
+
+            const textContent = getBlockTextContent(block);
+
+            item.innerHTML = `
+                <div class="live-block-header">
+                    <span class="live-block-type">${getBlockTypeName(bt)}</span>
+                    <span class="live-block-lock ${lockClass}">${lockLabel}</span>
+                </div>
+                <div class="live-block-content">${escapeHtml(textContent)}</div>
+            `;
+
+            // Click to lock/edit
+            if (!holder) {
+                item.addEventListener('click', () => requestLock(bid));
+            } else if (isMe && editingBlockId !== bid) {
+                item.addEventListener('click', () => startEditing(bid, textContent));
+            }
+
+            blocksList.appendChild(item);
+        });
+
+        // If editing, re-render the edit UI
+        if (editingBlockId && liveBlocks[editingBlockId]) {
+            const editItem = blocksList.querySelector(`[data-block-id="${editingBlockId}"]`);
+            if (editItem) showEditUI(editItem, editingBlockId);
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function requestLock(blockId) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ action: 'lock', block_id: blockId }));
+    }
+
+    function requestUnlock(blockId) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ action: 'unlock', block_id: blockId }));
+        if (editingBlockId === blockId) editingBlockId = null;
+    }
+
+    function startEditing(blockId, currentText) {
+        editingBlockId = blockId;
+        renderBlocks();
+    }
+
+    function showEditUI(item, blockId) {
+        const textContent = getBlockTextContent(liveBlocks[blockId]);
+        // Add edit textarea and buttons
+        const editArea = document.createElement('textarea');
+        editArea.className = 'live-block-edit';
+        editArea.value = textContent;
+        editArea.rows = 3;
+
+        const actions = document.createElement('div');
+        actions.className = 'live-block-actions';
+        actions.innerHTML = `
+            <button class="cancel-btn">Cancel</button>
+            <button class="save-btn">Save & Unlock</button>
+        `;
+
+        item.appendChild(editArea);
+        item.appendChild(actions);
+        editArea.focus();
+
+        // Prevent click from bubbling
+        editArea.addEventListener('click', e => e.stopPropagation());
+        actions.addEventListener('click', e => e.stopPropagation());
+
+        actions.querySelector('.cancel-btn').addEventListener('click', () => {
+            requestUnlock(blockId);
+            editingBlockId = null;
+            renderBlocks();
+        });
+
+        actions.querySelector('.save-btn').addEventListener('click', () => {
+            const newContent = editArea.value;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'update_block',
+                    block_id: blockId,
+                    content: newContent
+                }));
+            }
+            requestUnlock(blockId);
+            editingBlockId = null;
+            renderBlocks();
+        });
+    }
+
+    // --- Connect ---
+    connectBtn.addEventListener('click', () => {
+        const docToken = document.getElementById('live-doc-token').value.trim();
+        liveUser = document.getElementById('live-user-name').value.trim() || 'User';
+        const port = parseInt(document.getElementById('live-port').value) || 8765;
+
+        if (!docToken) {
+            showToast('Please enter a Document Token', 'error');
+            return;
+        }
+
+        // Start Python server via IPC
+        ipcRenderer.send('start-live-sync', { docToken, port });
+        setStatus('connecting');
+        connectBtn.style.display = 'none';
+        disconnectBtn.style.display = 'inline-flex';
+    });
+
+    // Server started — now connect WebSocket
+    ipcRenderer.on('live-sync-started', () => {
+        const port = parseInt(document.getElementById('live-port').value) || 8765;
+        const wsUrl = `ws://localhost:${port}`;
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            setStatus('connected');
+            blocksCard.style.display = 'block';
+            ws.send(JSON.stringify({ action: 'subscribe', user: liveUser }));
+        };
+
+        ws.onmessage = (evt) => {
+            try {
+                const msg = JSON.parse(evt.data);
+                handleWsMessage(msg);
+            } catch (e) {
+                console.error('WS parse error:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            setStatus('disconnected');
+        };
+
+        ws.onerror = (err) => {
+            console.error('WS error', err);
+            setStatus('disconnected');
+        };
+    });
+
+    function handleWsMessage(msg) {
+        switch (msg.event) {
+            case 'blocks_snapshot':
+                liveBlocks = {};
+                (msg.blocks || []).forEach(b => {
+                    if (b.block_id) liveBlocks[b.block_id] = b;
+                });
+                liveLocks = msg.locks || {};
+                renderBlocks();
+                break;
+
+            case 'block_updated':
+                if (msg.block_id && msg.block) {
+                    liveBlocks[msg.block_id] = msg.block;
+                    renderBlocks();
+                }
+                break;
+
+            case 'block_removed':
+                delete liveBlocks[msg.block_id];
+                delete liveLocks[msg.block_id];
+                renderBlocks();
+                break;
+
+            case 'lock_acquired':
+                liveLocks[msg.block_id] = msg.user;
+                renderBlocks();
+                break;
+
+            case 'lock_released':
+                delete liveLocks[msg.block_id];
+                renderBlocks();
+                break;
+
+            case 'lock_denied':
+                showToast(`Block locked by ${msg.held_by}`, 'error');
+                break;
+
+            case 'error':
+                showToast(msg.message || 'Server error', 'error');
+                break;
+        }
+    }
+
+    // --- Disconnect ---
+    disconnectBtn.addEventListener('click', () => {
+        if (ws) { ws.close(); ws = null; }
+        ipcRenderer.send('stop-live-sync');
+        setStatus('disconnected');
+        connectBtn.style.display = 'inline-flex';
+        disconnectBtn.style.display = 'none';
+        blocksCard.style.display = 'none';
+        liveBlocks = {};
+        liveLocks = {};
+        editingBlockId = null;
+    });
+
+    ipcRenderer.on('live-sync-stopped', () => {
+        if (ws) { ws.close(); ws = null; }
+        setStatus('disconnected');
+        connectBtn.style.display = 'inline-flex';
+        disconnectBtn.style.display = 'none';
+    });
+
+    // --- Refresh ---
+    refreshBtn.addEventListener('click', () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: 'refresh' }));
+        }
+    });
+
+    // Log server output
+    ipcRenderer.on('live-sync-log', (event, msg) => {
+        console.log('[LiveSync]', msg);
+    });
+})();

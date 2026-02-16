@@ -260,3 +260,73 @@ ipcMain.on('run-clean', (event) => {
   });
 });
 
+// --- Live Sync Server ---
+let liveSyncProcess = null;
+
+ipcMain.on('start-live-sync', (event, options) => {
+  if (liveSyncProcess) {
+    event.reply('live-sync-log', '⚠️ Live sync server is already running.');
+    return;
+  }
+
+  const { command, args } = getPythonPath();
+  const cwd = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+
+  // Build args: main.py live --doc-token X --port Y
+  const liveArgs = [...args, 'live',
+    '--doc-token', options.docToken,
+    '--port', String(options.port || 8765),
+    '--poll-interval', String(options.pollInterval || 3)
+  ];
+
+  event.reply('live-sync-log', `🚀 Starting live sync server...\nCommand: ${command} ${liveArgs.join(' ')}`);
+
+  liveSyncProcess = spawn(command, liveArgs, {
+    cwd: cwd,
+    env: { ...process.env }
+  });
+
+  liveSyncProcess.stdout.on('data', (data) => {
+    event.reply('live-sync-log', data.toString());
+  });
+
+  liveSyncProcess.stderr.on('data', (data) => {
+    event.reply('live-sync-log', `[stderr] ${data.toString()}`);
+  });
+
+  liveSyncProcess.on('error', (err) => {
+    event.reply('live-sync-log', `[ERROR] ${err.message}`);
+    event.reply('live-sync-stopped');
+    liveSyncProcess = null;
+  });
+
+  liveSyncProcess.on('close', (code) => {
+    event.reply('live-sync-log', `\n🛑 Live sync server exited with code ${code}`);
+    event.reply('live-sync-stopped');
+    liveSyncProcess = null;
+  });
+
+  // Notify renderer that server started (give it a moment to bind the port)
+  setTimeout(() => {
+    if (liveSyncProcess) {
+      event.reply('live-sync-started');
+    }
+  }, 1500);
+});
+
+ipcMain.on('stop-live-sync', (event) => {
+  if (liveSyncProcess) {
+    liveSyncProcess.kill();
+    liveSyncProcess = null;
+    event.reply('live-sync-log', '🛑 Live sync server stopped.');
+    event.reply('live-sync-stopped');
+  }
+});
+
+// Kill live sync on quit
+app.on('before-quit', () => {
+  if (liveSyncProcess) {
+    liveSyncProcess.kill();
+    liveSyncProcess = null;
+  }
+});
