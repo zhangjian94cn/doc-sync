@@ -17,7 +17,10 @@ def __getattr__(name):
     if name == "LiveSyncServer":
         from doc_sync.live.live_server import LiveSyncServer
         return LiveSyncServer
+    if name == "FileWatcher":
+        from doc_sync.live.file_watcher import FileWatcher
+        return FileWatcher
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["LockManager", "LiveSyncServer"]
+__all__ = ["LockManager", "LiveSyncServer", "FileWatcher"]

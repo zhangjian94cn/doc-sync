@@ -532,21 +532,22 @@ def live_main():
     """CLI entry point for Live Sync (实时协同) mode."""
     parser = argparse.ArgumentParser(
         prog="docsync live",
-        description="DocSync Live: 实时协同编辑飞书文档（基于 Block 级别锁）",
+        description="DocSync Live: 实时协同编辑飞书文档（双向同步 + Block 级别锁）",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
 示例:
-  使用配置文件中的默认文档:
+  使用配置文件中的默认文档 (自动双向同步):
     docsync live
 
-  指定文档 Token:
-    docsync live --doc-token doxcnXXXXXX
+  指定文档 Token 和本地文件:
+    docsync live --doc-token doxcnXXXXXX --local /path/to/note.md
 
   指定端口和轮询间隔:
     docsync live --doc-token doxcnXXXXXX --port 9000 --poll-interval 5
 """
     )
     parser.add_argument("--doc-token", default=None, help="飞书文档 Token (不指定则从 sync_config.json 读取)")
+    parser.add_argument("--local", default=None, help="本地 .md 文件路径 (启用双向实时同步，不指定则从 config 自动匹配)")
     parser.add_argument("--port", type=int, default=8765, help="WebSocket 服务器端口 (默认: 8765)")
     parser.add_argument("--host", default="localhost", help="WebSocket 服务器地址 (默认: localhost)")
     parser.add_argument("--poll-interval", type=float, default=3.0, help="飞书 API 轮询间隔秒数 (默认: 3.0)")
@@ -554,19 +555,33 @@ def live_main():
     
     args = parser.parse_args(sys.argv[2:])  # Skip 'docsync live'
     
-    # Resolve doc_token: CLI arg > config file
+    # Resolve doc_token and local_path: CLI arg > config file
     doc_token = args.doc_token
+    local_path = args.local
+    vault_root = None
+    
     if not doc_token:
         tasks = load_config(args.config)
         for task in tasks:
             if task.get("enabled", True) and task.get("cloud"):
                 doc_token = task["cloud"]
                 logger.info(f"从配置文件读取文档 Token: {doc_token}", icon="📄")
+                # Also resolve local_path from the same task if not specified
+                if not local_path and task.get("local"):
+                    local_path = task["local"]
+                    logger.info(f"从配置文件读取本地路径: {local_path}", icon="📝")
                 break
         if not doc_token:
             logger.error("未指定 --doc-token，且配置文件中无可用任务。")
             parser.print_help()
             sys.exit(1)
+    
+    # Resolve vault_root for local_path
+    if local_path:
+        local_path = os.path.abspath(local_path)
+        vault_root = find_vault_root(local_path)
+        if vault_root:
+            logger.info(f"Vault Root: {vault_root}", icon="🏠")
     
     # Ensure token
     user_token = FEISHU_USER_ACCESS_TOKEN
@@ -600,133 +615,41 @@ def live_main():
     except Exception as e:
         logger.warning(f"Token 校验异常: {e}")
     
-    # Resolve doc_token: if it's a folder, auto-detect which doc user is editing
+    # Detect token type and determine sync mode
     logger.info(f"正在检测 Token 类型: {doc_token}", icon="🔍")
     file_info = client.get_file_info(doc_token, obj_type="folder")
     
+    is_folder_mode = False
+    folder_token = None
+    
     if file_info and file_info.doc_type == "folder":
-        logger.info("检测到文件夹 Token，自动检测最近编辑的文档...", icon="📂")
+        logger.info("检测到文件夹 Token", icon="📂")
         
-        # Find the local path from the task config
-        local_path = None
-        tasks = load_config(args.config)
-        for task in tasks:
-            if task.get("cloud") == doc_token and task.get("enabled", True):
-                local_path = task.get("local")
-                break
+        # In folder mode: keep the folder token, watch the entire local folder
+        is_folder_mode = True
+        folder_token = doc_token
         
-        matched_token = None
-        if local_path and os.path.isdir(local_path):
-            # Find the most recently modified .md file
-            import glob
-            md_files = glob.glob(os.path.join(local_path, "**", "*.md"), recursive=True)
-            if md_files:
-                md_files.sort(key=os.path.getmtime, reverse=True)
-                recent_file = md_files[0]
-                rel_path = os.path.relpath(recent_file, local_path)
-                parts = rel_path.replace("\\", "/").split("/")
-                doc_name = os.path.splitext(parts[-1])[0]  # filename without .md
-                
-                logger.info(f"最近修改的文件: {rel_path}", icon="📝")
-                
-                # Navigate cloud folders to find the matching doc
-                current_folder_token = doc_token
-                # Walk through subfolder path (if any)
-                for subfolder_name in parts[:-1]:
-                    sub_files = client.list_folder_files(current_folder_token)
-                    sub_folders = [f for f in sub_files if f.type == "folder"]
-                    match = None
-                    for sf in sub_folders:
-                        if sf.name == subfolder_name:
-                            match = sf
-                            break
-                    if match:
-                        current_folder_token = match.token
-                        logger.info(f"匹配云端文件夹: {match.name}", icon="📂")
-                    else:
-                        logger.warning(f"云端未找到对应文件夹: {subfolder_name}")
-                        break
-                else:
-                    # Now find the doc by name in the current folder
-                    folder_files = client.list_folder_files(current_folder_token)
-                    cloud_docs = [f for f in folder_files if f.type == "docx"]
-                    for cd in cloud_docs:
-                        if cd.name == doc_name:
-                            matched_token = cd.token
-                            logger.success(f"自动匹配到云端文档: {cd.name} ({cd.token})")
-                            break
-                    if not matched_token:
-                        logger.warning(f"云端文件夹中未找到名为 '{doc_name}' 的文档")
-        
-        if matched_token:
-            doc_token = matched_token
-        else:
-            # Fallback: interactive folder browsing
-            logger.info("自动匹配失败，进入手动选择模式...", icon="🔍")
-            current_folder = doc_token
-            folder_stack = []
-            
-            while True:
-                files = client.list_folder_files(current_folder)
-                folders = [f for f in files if f.type == "folder"]
-                docs = [f for f in files if f.type == "docx"]
-                
-                if not folders and not docs:
-                    if folder_stack:
-                        logger.warning("此文件夹为空，返回上一级...")
-                        current_folder = folder_stack.pop()
-                        continue
-                    else:
-                        logger.error("文件夹中没有找到任何文档或子文件夹。")
-                        sys.exit(1)
-                
-                if not folders and len(docs) == 1:
-                    doc_token = docs[0].token
-                    logger.info(f"自动选择唯一文档: {docs[0].name}", icon="✅")
+        # Ensure we have a local folder path for folder mode
+        if not local_path:
+            tasks = load_config(args.config)
+            for task in tasks:
+                if task.get("cloud") == doc_token and task.get("enabled", True):
+                    local_path = task.get("local")
                     break
-                
-                print(f"\n{'─' * 40}")
-                items = []
-                for f in folders:
-                    items.append(("folder", f))
-                for d in docs:
-                    items.append(("doc", d))
-                
-                for i, (item_type, item) in enumerate(items):
-                    icon = "📂" if item_type == "folder" else "📄"
-                    print(f"  [{i+1}] {icon} {item.name}")
-                
-                if folder_stack:
-                    print(f"  [0] ⬆️  返回上一级")
-                
-                try:
-                    choice = input(f"\n请选择文档或进入子文件夹 [1-{len(items)}]: ").strip()
-                    idx = int(choice)
-                    
-                    if idx == 0 and folder_stack:
-                        current_folder = folder_stack.pop()
-                        continue
-                    
-                    idx -= 1
-                    if 0 <= idx < len(items):
-                        item_type, item = items[idx]
-                        if item_type == "folder":
-                            folder_stack.append(current_folder)
-                            current_folder = item.token
-                            logger.info(f"进入文件夹: {item.name}", icon="📂")
-                        else:
-                            doc_token = item.token
-                            logger.success(f"已选择文档: {item.name}")
-                            break
-                    else:
-                        print("  ⚠️ 编号超出范围，请重新输入。")
-                except ValueError:
-                    print("  ⚠️ 请输入数字编号。")
-                except KeyboardInterrupt:
-                    logger.info("\n操作取消")
-                    sys.exit(0)
+        
+        if local_path and os.path.isdir(local_path):
+            logger.info(f"文件夹模式: 监听 {local_path} 下所有 .md 文件变更", icon="📁")
+        elif local_path and os.path.isfile(local_path):
+            # local is a file but cloud is a folder — use single file mode
+            is_folder_mode = False
+            logger.info(f"本地路径是文件，使用单文件模式: {local_path}", icon="📄")
+        else:
+            logger.warning("未找到有效的本地文件夹路径，文件夹模式将仅监听变更")
     else:
         logger.info("检测为文档 Token，直接使用。", icon="📄")
+    
+    if not local_path:
+        logger.warning("未指定本地路径，仅启用 WebSocket 服务（不启用双向文件同步）", icon="⚠️")
     
     # Start the live sync server
     from doc_sync.live.live_server import run_live_server
@@ -738,6 +661,9 @@ def live_main():
         host=args.host,
         port=args.port,
         poll_interval=args.poll_interval,
+        local_path=local_path,
+        vault_root=vault_root,
+        is_folder_mode=is_folder_mode,
     )
 
 
