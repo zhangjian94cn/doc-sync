@@ -83,6 +83,7 @@ class MediaOperationsMixin:
                     if result.get("code") == 0:
                         file_token = result.get("data", {}).get("file_token")
                         logger.info(f"Image uploaded successfully: {file_name} -> {file_token}")
+                        logger.debug(f"Upload API full response: {result}")
                         
                         # Cache the result
                         if file_token:
@@ -219,34 +220,53 @@ class MediaOperationsMixin:
     def update_block_image(self, document_id: str, block_id: str, token: str) -> bool:
         """Update an image block with a new image token.
         
+        Uses raw HTTP PATCH to replace the image token on an existing block.
+        
         Args:
             document_id: Document ID
             block_id: Image block ID to update
-            token: New image token
+            token: New image file token
         
         Returns:
             True if successful
         """
-        from lark_oapi.api.docx.v1 import (
-            PatchDocumentBlockRequest, UpdateBlockRequest, ReplaceImageRequest
-        )
+        import requests as req
         
         self._rate_limit()
         
-        request = PatchDocumentBlockRequest.builder() \
-            .document_id(document_id) \
-            .block_id(block_id) \
-            .document_revision_id(-1) \
-            .request_body(
-                UpdateBlockRequest.builder()
-                    .replace_image(
-                        ReplaceImageRequest.builder().token(token).build()
-                    )
-                    .build()
-            ).build()
+        url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{document_id}/blocks/{block_id}"
+        auth_token = self.user_access_token or self._get_tenant_access_token()
         
-        response = self.client.docx.v1.document_block.patch(request, self._get_request_option())
-        return response.success()
+        if not auth_token:
+            logger.error("Failed to get access token for update_block_image")
+            return False
+        
+        headers = {
+            "Authorization": f"Bearer {auth_token}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+        
+        params = {"document_revision_id": "-1"}
+        body = {
+            "replace_image": {
+                "token": token
+            }
+        }
+        
+        try:
+            resp = req.patch(url, headers=headers, params=params, json=body, timeout=30)
+            result = resp.json()
+            
+            if resp.status_code == 200 and result.get("code") == 0:
+                logger.debug(f"Image block updated successfully: block_id={block_id}, token={token}")
+                return True
+            else:
+                logger.error(f"Image block update FAILED: status={resp.status_code}, code={result.get('code')}, msg={result.get('msg')}")
+                logger.error(f"Full response: {result}")
+                return False
+        except Exception as e:
+            logger.error(f"Image block update exception: {e}")
+            return False
 
     def update_block_file(self, document_id: str, block_id: str, token: str) -> bool:
         """Update a file block with a new file token.

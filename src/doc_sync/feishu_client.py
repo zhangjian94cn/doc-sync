@@ -238,7 +238,7 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
         def create_level(parent_id, current_blocks, insert_index=-1):
             batch_payload = []
             children_map = {} 
-            media_tasks = [] 
+            media_tasks = []
             file_uploads = [] 
             
             # ... (Existing logic for preparing batch payload) ...
@@ -293,10 +293,13 @@ class FeishuClient(FeishuClientBase, BlockOperationsMixin, DocumentOperationsMix
                 if idx < len(created_ids):
                     block_id = created_ids[idx]
                     path = task["path"]
-                    token = self.upload_image(path, block_id, drive_route_token=document_id)
-                    if token:
-                        self.update_block_image(document_id, block_id, token)
-                        logger.success(f"图片已上传: {os.path.basename(path)}")
+                    file_token = self.upload_image(path, block_id, drive_route_token=document_id)
+                    if file_token:
+                        update_ok = self.update_block_image(document_id, block_id, file_token)
+                        if update_ok:
+                            logger.success(f"图片已上传: {os.path.basename(path)}")
+                        else:
+                            logger.error(f"图片块更新失败: block_id={block_id}, file_token={file_token}")
 
             for idx, kids in children_map.items():
                 if idx < len(created_ids):
